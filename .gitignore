@@ -1,0 +1,16 @@
+# Edytory i system
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logi i pliki tymczasowe
+*.log
+*.tmp
+_*.html
+
+# Zależności (gdyby kiedyś były)
+node_modules/
+__pycache__/

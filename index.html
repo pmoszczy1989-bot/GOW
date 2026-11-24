@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>GOW – pixel-artowa platformówka</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none;
+    user-select: none; -webkit-user-select: none; }
+  #game { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    image-rendering: pixelated; image-rendering: crisp-edges; }
+  #title { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, .88); color: #e8d8b0; font: 14px/1.5 monospace; text-align: center;
+    padding: 16px; box-sizing: border-box; z-index: 5; cursor: pointer; }
+  #title.hide { display: none; }
+  #title .box { max-width: 580px; }
+  #title h1 { font-size: 44px; margin: 0 0 4px; color: #f0c040; letter-spacing: 8px; text-shadow: 3px 3px 0 #802010; }
+  #title .sub { color: #a89878; margin: 0 0 14px; }
+  #title kbd { background: #2a2a2a; border: 1px solid #666; border-radius: 3px; padding: 0 4px; color: #fff; }
+  #title .go { color: #f0c040; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+  #touch { position: absolute; bottom: max(8px, env(safe-area-inset-bottom)); left: 0; right: 0; display: none;
+    justify-content: space-between; padding: 0 12px; z-index: 4; pointer-events: none; }
+  body.touch #touch { display: flex; }
+  #touch .g { display: flex; gap: 8px; pointer-events: auto; }
+  #touch button { width: 58px; height: 58px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, .35);
+    background: rgba(255, 255, 255, .1); color: #fff; font-size: 24px; padding: 0; }
+  #touch button.on { background: rgba(240, 192, 64, .45); }
+</style>
+</head>
+<body>
+<canvas id="game" width="320" height="200"></canvas>
+
+<div id="title">
+  <div class="box">
+    <h1>GOW</h1>
+    <p class="sub">w hołdzie klasycznemu Prince of Persia (1989)</p>
+    <p>Spadasz z nocnego nieba prosto na dach pałacu.<br>
+      Zdobądź miecz, pokonaj strażnika lochu i ucieknij przez drzwi.</p>
+    <p>
+      <kbd>←</kbd><kbd>→</kbd> bieg &nbsp; <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> ostrożny krok<br>
+      <kbd>↑</kbd> skok / podciągnięcie / drzwi &nbsp; <kbd>↑</kbd>+<kbd>→</kbd> skok w dal<br>
+      <kbd>↓</kbd> kucnięcie / zwis z krawędzi &nbsp; <kbd>Shift</kbd> podnieś / cios<br>
+      walka: <kbd>Shift</kbd> cios, <kbd>↑</kbd> zasłona &nbsp; <kbd>R</kbd> od nowa
+    </p>
+    <p class="go">Naciśnij dowolny klawisz lub dotknij ekranu</p>
+  </div>
+</div>
+
+<div id="touch">
+  <div class="g"><button data-k="left">◀</button><button data-k="right">▶</button></div>
+  <div class="g"><button data-k="down">▼</button><button data-k="up">▲</button><button data-k="act">⚔</button></div>
+</div>
+
+<script src="game.js?v=3"></script>
+</body>
+</html>
