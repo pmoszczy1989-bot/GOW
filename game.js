@@ -73,7 +73,9 @@ const FIGHTST = ['fight', 'fstep', 'strike', 'block'];
 // ===== Płótno i skalowanie =====
 const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
-cv.width = SW; cv.height = SH;
+// Renderowanie w wyższej rozdzielczości (RS pikseli płótna na 1 jednostkę gry) – gładka grafika
+let RS = 2;
+cv.width = SW * RS; cv.height = SH * RS;
 
 // Warstwa tekstu w pełnej rozdzielczości ekranu – napisy są gładkie, nie pikselowe
 const tv = document.getElementById('txt');
@@ -90,6 +92,8 @@ function fit() {
   cv.style.height = tv.style.height = ch + 'px';
   tv.width = Math.round(cw * dpr); tv.height = Math.round(ch * dpr);
   TS = tv.width / SW;
+  RS = Math.min(4, Math.max(2, Math.ceil(TS)));
+  if (cv.width !== SW * RS) { cv.width = SW * RS; cv.height = SH * RS; }
 }
 window.addEventListener('resize', fit);
 fit();
@@ -969,27 +973,38 @@ function drawSky(c) {
   c.fillStyle = gr; c.fillRect(0, 0, SW, 62);
   for (let i = 0; i < 90; i++) {
     c.fillStyle = rnd() < 0.3 ? '#ffffff' : rnd() < 0.5 ? '#8890c0' : '#c0a0d0';
-    c.fillRect(Math.floor(rnd() * SW), Math.floor(rnd() * 46), 1, 1);
+    const sx = rnd() * SW, sy = rnd() * 46, sr = 0.3 + rnd() * 0.45;
+    c.beginPath(); c.arc(sx, sy, sr, 0, Math.PI * 2); c.fill();
   }
   // Mgławica
   const ng = c.createRadialGradient(90, 18, 2, 90, 18, 50);
   ng.addColorStop(0, 'rgba(120,60,160,0.35)'); ng.addColorStop(1, 'rgba(60,20,90,0)');
   c.fillStyle = ng; c.fillRect(30, 0, 120, 50);
-  // Planeta z pierścieniem
-  for (let dy = -11; dy <= 11; dy++) for (let dx = -11; dx <= 11; dx++) {
-    const q = dx * dx + dy * dy;
-    if (q <= 121) {
-      const band = Math.floor((dy + 11) / 4) % 2;
-      c.fillStyle = q > 90 ? '#a87050' : (dx - dy > 8 ? '#6a4038' : band ? '#e0a070' : '#c88a60');
-      c.fillRect(250 + dx, 18 + dy, 1, 1);
-    }
+  // Planeta z pierścieniem (tylna połowa pierścienia → kula → przednia połowa)
+  const ring = (a0, a1) => {
+    c.strokeStyle = 'rgba(232,208,168,0.85)'; c.lineWidth = 1.2;
+    c.beginPath(); c.ellipse(250, 18.5, 20, 4, 0.18, a0, a1); c.stroke();
+    c.strokeStyle = 'rgba(160,130,110,0.6)'; c.lineWidth = 0.6;
+    c.beginPath(); c.ellipse(250, 18.5, 16.5, 3.1, 0.18, a0, a1); c.stroke();
+  };
+  ring(Math.PI, Math.PI * 2);
+  c.save();
+  c.beginPath(); c.arc(250, 18, 11, 0, Math.PI * 2); c.clip();
+  const pg = c.createLinearGradient(240, 8, 260, 28);
+  pg.addColorStop(0, '#f0b47a'); pg.addColorStop(1, '#b07050');
+  c.fillStyle = pg; c.fillRect(238, 6, 24, 24);
+  for (let k = 0; k < 6; k++) {
+    c.fillStyle = k % 2 ? 'rgba(255,220,170,0.25)' : 'rgba(120,60,40,0.22)';
+    c.beginPath(); c.ellipse(250, 9 + k * 3.6, 14, 1.3, 0.18, 0, Math.PI * 2); c.fill();
   }
-  c.fillStyle = '#e8d0a8';
-  for (let dx = -20; dx <= 20; dx++) {
-    const y = Math.round(18 + dx * 0.18 + Math.sqrt(Math.max(0, 1 - (dx / 20) ** 2)) * 3);
-    if (Math.abs(dx) > 10 || y > 19) c.fillRect(250 + dx, y, 1, 1);
-  }
-  c.fillStyle = '#d8d8e8'; c.fillRect(212, 10, 3, 3); c.fillStyle = '#9898b0'; c.fillRect(214, 12, 1, 1);
+  const sh = c.createRadialGradient(245, 13, 4, 252, 20, 14);
+  sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(30,10,30,0.75)');
+  c.fillStyle = sh; c.fillRect(238, 6, 24, 24);
+  c.restore();
+  ring(0, Math.PI);
+  // Księżyc
+  c.fillStyle = '#d8d8e8'; c.beginPath(); c.arc(213.5, 11.5, 1.7, 0, Math.PI * 2); c.fill();
+  c.fillStyle = 'rgba(80,80,110,0.7)'; c.beginPath(); c.arc(214.3, 12.2, 1.1, 0, Math.PI * 2); c.fill();
   // Sylwetka cytadeli z wieżami i antenami
   c.fillStyle = '#140c26';
   c.fillRect(0, 48, SW, 14);
@@ -1002,15 +1017,16 @@ function drawSky(c) {
   c.fillRect(56, 40, 30, 10); c.fillRect(230, 42, 40, 8);
   c.fillStyle = '#f0c050';
   [[103, 26], [108, 30], [155, 36], [165, 36], [199, 30], [60, 44], [240, 45], [17, 34], [289, 38]]
-    .forEach(([x, y]) => c.fillRect(x, y, 1, 1));
+    .forEach(([x, y]) => { c.beginPath(); c.arc(x + 0.5, y + 0.5, 0.6, 0, Math.PI * 2); c.fill(); });
 }
 
 function buildBG(L) {
   const T = THEMES[L.theme];
   seed = 7 + L.theme * 101;
   const b = document.createElement('canvas');
-  b.width = SW; b.height = SH;
+  b.width = SW * RS; b.height = SH * RS;
   const c = b.getContext('2d');
+  c.scale(RS, RS);
   const top = L.sky ? 62 : 0;
   if (L.sky) drawSky(c);
   // Mur tła z cegieł
@@ -1107,15 +1123,18 @@ function buildBG(L) {
 }
 
 // Winieta – przyciemnione brzegi ekranu
-const VIG = (() => {
+let VIG = null;
+function vignette() {
+  if (VIG && VIG.width === SW * RS) return VIG;
   const b = document.createElement('canvas');
-  b.width = SW; b.height = 180;
+  b.width = SW * RS; b.height = 180 * RS;
   const c = b.getContext('2d');
+  c.scale(RS, RS);
   const g = c.createRadialGradient(SW / 2, 90, 60, SW / 2, 90, 200);
   g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.6)');
   c.fillStyle = g; c.fillRect(0, 0, SW, 180);
-  return b;
-})();
+  return (VIG = b);
+}
 
 // ===== Rysowanie: postacie (szkielet z „kości” o grubości 2 px) =====
 // Pozy: [głowa, szyja, biodro, kolano1, stopa1, kolano2, stopa2, łokieć1, dłoń1, łokieć2, dłoń2, (czubek ostrza)]
@@ -1170,11 +1189,18 @@ const STY = {
 // Kolejki elementów świecących – rysowane po nałożeniu ciemności, więc „świecą” w lochu
 let BQ = [], EQ = [];
 
+// Gładki odcinek z zaokrąglonymi końcami (kończyny, broń, ostrza)
 function seg(a, b, w, col) {
-  ctx.fillStyle = col;
-  const dx = b[0] - a[0], dy = b[1] - a[1], n = Math.max(Math.abs(dx), Math.abs(dy), 1);
-  const o = Math.floor(w / 2);
-  for (let i = 0; i <= n; i++) ctx.fillRect(Math.round(a[0] + dx * i / n) - o, Math.round(a[1] + dy * i / n) - o, w, w);
+  ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0] + 0.01, b[1]); ctx.stroke();
+}
+function dot(x, y, r, col) {
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+function rrect(x, y, w, h, r, col) {
+  ctx.fillStyle = col; ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+  ctx.fill();
 }
 function poly(pts, col) {
   ctx.fillStyle = col;
@@ -1186,28 +1212,31 @@ function poly(pts, col) {
 function drawHead(h, n, dir, S, C) {
   const x = h[0], y = h[1];
   if (S.type === 'hero') {
-    ctx.fillStyle = C(S.skin); ctx.fillRect(x - 2, y - 3, 5, 6);
-    ctx.fillStyle = C(S.hair); ctx.fillRect(x - 2, y - 4, 5, 2); ctx.fillRect(x - dir * 2, y - 3, 1, 5);
-    ctx.fillRect(x - dir * 3, y - 2, 1, 3);
-    ctx.fillStyle = C('#1a1010'); ctx.fillRect(x + dir, y - 1, 1, 1);
-    ctx.fillStyle = C(S.cloak); ctx.fillRect(n[0] - 3, n[1] - 1, 6, 2);        // kaptur zsunięty na ramiona
+    ctx.fillStyle = C(S.cloak); ctx.beginPath(); ctx.ellipse(n[0], n[1], 3.6, 1.6, 0, 0, Math.PI * 2); ctx.fill();   // kaptur zsunięty na ramiona
+    ctx.fillStyle = C(S.skin); ctx.beginPath(); ctx.ellipse(x + dir * 0.4, y, 2.6, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = C(S.hair); ctx.beginPath(); ctx.ellipse(x - dir * 0.8, y - 1.8, 2.8, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x - dir * 2.2, y, 1, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+    dot(x + dir * 1.4, y - 0.4, 0.5, C('#1a1010'));
   } else if (S.type === 'trooper') {
-    ctx.fillStyle = C(S.helm); ctx.fillRect(x - 3, y - 4, 6, 7);
-    ctx.fillStyle = C(S.helmB); ctx.fillRect(x - 3, y + 2, 6, 1); ctx.fillRect(dir > 0 ? x - 3 : x + 2, y - 3, 1, 5);
-    if (S.stripe) { ctx.fillStyle = C(S.stripe); ctx.fillRect(x - 3, y - 4, 6, 1); }
-    ctx.fillStyle = C(S.visor); ctx.fillRect(dir > 0 ? x : x - 2, y - 1, 3, 1);
-    EQ.push({ x: x + dir, y: y - 1, col: S.visor, r: 4, a: 0.25 });
+    rrect(x - 3, y - 4, 6, 7, 2.5, C(S.helm));
+    rrect(x - 3, y + 1.6, 6, 1.4, 0.6, C(S.helmB));
+    rrect(dir > 0 ? x - 3 : x + 2, y - 3, 1, 5, 0.5, C(S.helmB));
+    if (S.stripe) rrect(x - 2.5, y - 4, 5, 1.2, 0.6, C(S.stripe));
+    rrect(dir > 0 ? x - 0.2 : x - 2.8, y - 1.3, 3, 1.4, 0.7, C(S.visor));
+    EQ.push({ x: x + dir, y: y - 0.6, col: S.visor, r: 4, a: 0.25 });
   } else {
-    ctx.fillStyle = C(S.hood); ctx.fillRect(x - 3, y - 5, 7, 9); ctx.fillRect(n[0] - 4, n[1] - 1, 8, 2);
-    ctx.fillStyle = C(S.skin); ctx.fillRect(dir > 0 ? x : x - 2, y - 1, 3, 4);
-    ctx.fillStyle = C('#3a2a30'); ctx.fillRect(dir > 0 ? x : x - 2, y - 1, 3, 1);
-    EQ.push({ x: x + dir, y: y, col: S.eye, r: 5, a: 0.5 });
+    ctx.fillStyle = C(S.hood); ctx.beginPath(); ctx.ellipse(n[0], n[1], 4.2, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x - dir * 3.5, y + 4); ctx.quadraticCurveTo(x - dir * 4, y - 6, x + dir * 1, y - 5.2);
+    ctx.quadraticCurveTo(x + dir * 4, y - 3, x + dir * 3.6, y + 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = C(S.skin); ctx.beginPath(); ctx.ellipse(x + dir * 1.2, y + 0.8, 1.6, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = C('#3a2a30'); ctx.fillRect(x + dir * 1.2 - 1.6, y - 1.2, 3.2, 1);
+    EQ.push({ x: x + dir * 1.5, y: y, col: S.eye, r: 5, a: 0.5 });
   }
 }
 
 // o: { blade: 'hand'|'hip'|'', ign, bc: kolor ostrza, trail, own, gun, mf, white, sway }
 function drawFig(x, y, dir, a, S, o) {
-  x = Math.round(x); y = Math.round(y) - 1;
+  y -= 1;
   const J = i => [x + dir * a[i], y + a[i + 1]];
   const head = J(0), neck = J(2), hip = J(4), k1 = J(6), f1 = J(8), k2 = J(10), f2 = J(12);
   const e1 = J(14), h1 = J(16), e2 = J(18), h2 = J(20);
@@ -1222,13 +1251,13 @@ function drawFig(x, y, dir, a, S, o) {
   // Rękojeść przy pasie
   if (o.blade === 'hip') {
     seg([hip[0] - dir * 2, hip[1] - 1], [hip[0] - dir * 6, hip[1] + 4], 2, C('#9aa4b4'));
-    ctx.fillStyle = C('#2a2e38'); ctx.fillRect(hip[0] - dir * 6 - 1, hip[1] + 3, 2, 2);
+    dot(hip[0] - dir * 6, hip[1] + 4, 1.2, C('#2a2e38'));
   }
   // Tylna ręka i noga
-  seg(neck, e2, 2, C(S.armB)); seg(e2, h2, 2, C(S.armB));
-  ctx.fillStyle = C(S.handB); ctx.fillRect(h2[0] - 1, h2[1] - 1, 2, 2);
-  seg(hip, k2, 2, C(S.legB)); seg(k2, f2, 2, C(S.legB));
-  ctx.fillStyle = C(S.boot); ctx.fillRect(f2[0] - 1, f2[1] - 1, 2, 2); ctx.fillRect(f2[0] - 1 + dir, f2[1], 2, 1);
+  seg(neck, e2, 2.2, C(S.armB)); seg(e2, h2, 2, C(S.armB));
+  dot(h2[0], h2[1], 1.2, C(S.handB));
+  seg(hip, k2, 2.6, C(S.legB)); seg(k2, f2, 2.2, C(S.legB));
+  rrect(f2[0] - 1.4 + Math.min(0, dir), f2[1] - 1.2, 3.4, 2, 0.9, C(S.boot));
   // Tułów, tunika / szata / pancerz
   seg(neck, hip, S.thick, C(S.body));
   if (upright && S.type === 'hero') {
@@ -1240,13 +1269,13 @@ function drawFig(x, y, dir, a, S, o) {
   if (S.type === 'trooper') {
     seg([neck[0] + dir, neck[1] + 2], [lerp(neck[0], hip[0], 0.6) + dir, lerp(neck[1], hip[1], 0.6)], 1, C(S.plate));
   }
-  ctx.fillStyle = C(S.belt); ctx.fillRect(hip[0] - 2, hip[1] - 3, 5, 2);
+  rrect(hip[0] - 2.5, hip[1] - 3, 5, 2, 0.8, C(S.belt));
   // Przednia noga
-  seg(hip, k1, 2, C(S.leg)); seg(k1, f1, 2, C(S.leg));
-  ctx.fillStyle = C(S.boot); ctx.fillRect(f1[0] - 1, f1[1] - 1, 2, 2); ctx.fillRect(f1[0] - 1 + dir, f1[1], 2, 1);
+  seg(hip, k1, 2.6, C(S.leg)); seg(k1, f1, 2.2, C(S.leg));
+  rrect(f1[0] - 1.4 + Math.min(0, dir), f1[1] - 1.2, 3.4, 2, 0.9, C(S.boot));
   drawHead(head, neck, dir, S, C);
   // Przednia ręka
-  seg(neck, e1, 2, C(S.arm)); seg(e1, h1, 2, C(S.arm));
+  seg(neck, e1, 2.2, C(S.arm)); seg(e1, h1, 2, C(S.arm));
   // Broń palna w dłoni
   if (o.gun) {
     const vx = h1[0] - e1[0], vy = h1[1] - e1[1], n = Math.hypot(vx, vy) || 1, ux = vx / n, uy = vy / n;
@@ -1254,10 +1283,10 @@ function drawFig(x, y, dir, a, S, o) {
     const tip = [h1[0] + ux * L, h1[1] + uy * L];
     seg([h1[0] - ux * bk, h1[1] - uy * bk], tip, 2, C('#1e2026'));
     seg([h1[0] + ux * 2, h1[1] + uy * 2 - 1], [tip[0], tip[1] - 1], 1, C('#4a4e58'));
-    if (rifle) { ctx.fillStyle = C(S.stripe); ctx.fillRect(Math.round(h1[0] + ux * 6), Math.round(h1[1] + uy * 6) - 1, 2, 1); }
+    if (rifle) seg([h1[0] + ux * 5.5, h1[1] + uy * 5.5 - 1], [h1[0] + ux * 7.5, h1[1] + uy * 7.5 - 1], 1, C(S.stripe));
     if (o.mf > 0) EQ.push({ x: tip[0] + ux * 2, y: tip[1] + uy * 2 - 1, col: '#ffe0c0', r: 9, a: 0.8, star: true });
   }
-  ctx.fillStyle = C(S.hand); ctx.fillRect(h1[0] - 1, h1[1] - 1, 2, 2);
+  dot(h1[0], h1[1], 1.2, C(S.hand));
   // Ostrze energii (rysowane później – świeci)
   if (o.blade === 'hand' && o.ign > 0.02) {
     let tx, ty;
@@ -1488,7 +1517,7 @@ function lighting() {
   for (const b of BOLTS) glow(b.x, b.y, 16, '255,60,40', 0.35);
   for (const e of EQ) glow(e.x, e.y, e.r, e.rgb || hexRgb(e.col), e.a);
   ctx.globalCompositeOperation = 'source-over';
-  ctx.drawImage(VIG, 0, 0);
+  ctx.drawImage(vignette(), 0, 0, SW, 180);
 }
 
 function drawEmissive() {
@@ -1508,29 +1537,33 @@ function drawEmissive() {
       }
       ctx.globalCompositeOperation = 'source-over';
     }
-    seg(b.h, b.t, 3, `rgba(${b.bc.rgb},0.8)`);
-    seg(b.h, b.t, 1, '#ffffff');
+    ctx.globalCompositeOperation = 'lighter';
+    seg(b.h, b.t, 5, `rgba(${b.bc.rgb},0.25)`);
+    ctx.globalCompositeOperation = 'source-over';
+    seg(b.h, b.t, 2.6, `rgba(${b.bc.rgb},0.9)`);
+    seg(b.h, b.t, 1.1, '#ffffff');
   }
   // Strzały
+  ctx.globalCompositeOperation = 'lighter';
   for (const b of BOLTS) {
-    const s = Math.sign(b.vx), x = Math.round(b.x), y = Math.round(b.y);
-    ctx.fillStyle = 'rgba(255,60,40,0.8)'; ctx.fillRect(Math.min(x, x - s * 8), y - 1, 9, 3);
-    ctx.fillStyle = '#ffe0d0'; ctx.fillRect(Math.min(x, x - s * 7), y, 8, 1);
+    const s = Math.sign(b.vx);
+    seg([b.x, b.y], [b.x - s * 8, b.y], 4, 'rgba(255,60,40,0.35)');
+    seg([b.x, b.y], [b.x - s * 7, b.y], 2, 'rgba(255,80,50,0.9)');
+    seg([b.x, b.y], [b.x - s * 6, b.y], 0.8, '#fff0e8');
   }
   // Iskry i świecące punkty
-  for (const q of parts) if (q.e) { ctx.fillStyle = q.col; ctx.fillRect(Math.round(q.x), Math.round(q.y), 1, 1); }
+  for (const q of parts) if (q.e) dot(q.x, q.y, 0.7, q.col);
   for (const e of EQ) {
-    ctx.fillStyle = e.col; ctx.fillRect(Math.round(e.x), Math.round(e.y), 1, 1);
-    if (e.star) { ctx.fillRect(Math.round(e.x) - 2, Math.round(e.y), 5, 1); ctx.fillRect(Math.round(e.x), Math.round(e.y) - 2, 1, 5); }
+    dot(e.x, e.y, 0.7, e.col);
+    if (e.star) { seg([e.x - 3, e.y], [e.x + 3, e.y], 0.8, e.col); seg([e.x, e.y - 3], [e.x, e.y + 3], 0.8, e.col); }
   }
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 function tri(x, y, full, col, dark) {
-  for (let i = 0; i < 4; i++) {
-    ctx.fillStyle = full ? col : dark;
-    if (full || i === 3) ctx.fillRect(x + 3 - i, y + i, 1 + i * 2, 1);
-    else { ctx.fillRect(x + 3 - i, y + i, 1, 1); ctx.fillRect(x + 3 + i, y + i, 1, 1); }
-  }
+  ctx.beginPath(); ctx.moveTo(x + 0.5, y + 0.5); ctx.lineTo(x + 6.5, y + 0.5); ctx.lineTo(x + 3.5, y + 4.5); ctx.closePath();
+  if (full) { ctx.fillStyle = col; ctx.fill(); }
+  else { ctx.strokeStyle = dark; ctx.lineWidth = 0.8; ctx.lineJoin = 'round'; ctx.stroke(); }
 }
 
 function hint() {
@@ -1587,6 +1620,8 @@ function drawHUD() {
 
 function draw() {
   TQ = []; BQ = []; EQ = [];
+  ctx.setTransform(RS, 0, 0, RS, 0, 0);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   if (game.mode === 'trans') {
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, SW, SH);
     const k = Math.min(1, game.trans / 0.6, (2.4 - game.trans) / 0.4);
@@ -1597,15 +1632,16 @@ function draw() {
     return;
   }
   ctx.save();
-  if (game.shake > 0.3) ctx.translate(Math.round((Math.random() - 0.5) * game.shake * 2), Math.round((Math.random() - 0.5) * game.shake * 2));
-  ctx.drawImage(BGS[lvl], 0, 0);
+  if (game.shake > 0.3) ctx.translate((Math.random() - 0.5) * game.shake * 2, (Math.random() - 0.5) * game.shake * 2);
+  if (BGS[lvl].width !== SW * RS) BGS[lvl] = buildBG(LV);   // zmiana rozdzielczości (obrót / okno)
+  ctx.drawImage(BGS[lvl], 0, 0, SW, SH);
   drawDynamic();
   if (game.mode !== 'title') {
     for (const f of FOES) if (!f.alive && !(f.st === 'ffall' && f.y > SH)) drawFoe(f);
     for (const f of FOES) if (f.alive) drawFoe(f);
     drawPlayer();
   }
-  for (const q of parts) if (!q.e) { ctx.fillStyle = q.col; ctx.fillRect(Math.round(q.x), Math.round(q.y), 1, 1); }
+  for (const q of parts) if (!q.e) dot(q.x, q.y, 0.7, q.col);
   lighting();
   drawEmissive();
   ctx.restore();

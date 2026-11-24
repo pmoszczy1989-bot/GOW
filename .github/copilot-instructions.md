@@ -11,7 +11,7 @@ Single-screen pixel-art platformer modelled on the classic Prince of Persia (198
 ## Architecture
 
 - `game.js` – one plain script (no modules): `LEVELS` (5 maps, 3 rows × 10 tiles + foes), `BLADES` (hero blade colours, never red), state (`game`, `P`, `FOES`, `BOLTS`, `gate`), updates (`updPlayer`, `updTrooper`, `updLord`, `boltHitsPlayer`), drawing (`buildBG` per-level prerender with `THEMES`, `drawFig` + `STY`, `slashPose`, `lighting`, `drawEmissive`), WebAudio, fixed 1/60 s loop.
-- Internal resolution 320×200 (`TW=32`, `RH=60`), HUD at y 180–200.
+- Game coordinates 320×200 (`TW=32`, `RH=60`), HUD at y 180–200. The canvas is supersampled: `draw()` sets `ctx.setTransform(RS,…)` with `RS` 2–4 from `fit()`; offscreen canvases (`buildBG`, `vignette`) are built at `SW*RS` and rebuilt when `RS` changes. Draw smooth shapes (`seg` strokes, `dot`, `rrect`), not pixel-snapped `Math.round` rects.
 - All text goes through `txt()` (drawn on the full-resolution overlay canvas `#txt`); never `fillText` on the pixel canvas.
 
 ## Conventions

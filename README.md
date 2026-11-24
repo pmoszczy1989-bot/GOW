@@ -59,7 +59,8 @@ Kluczowe funkcje: `loadLevel`, `newGame`, `restart`, `finishLevel`, `update(dt)`
 (style postaci `STY`), `slashPose` (animacja ciosów), `lighting` (mrok, światła, winieta),
 `drawEmissive` (ostrza ze smugą, strzały, iskry), `draw`.
 
-Grafika rysowana jest w 320×200 i skalowana pikselowo; napisy (`txt()`) trafiają na warstwę `#txt`
+Współrzędne gry to 320×200, ale płótno renderuje w 2–4× wyższej rozdzielczości (`RS`, wg ekranu) –
+gładkie linie, zaokrąglone kształty i poświaty zamiast pikseli. Napisy (`txt()`) trafiają na warstwę `#txt`
 w pełnej rozdzielczości ekranu, więc są gładkie.
 
 ## Test
