@@ -20,7 +20,8 @@ Na telefonie/tablecie pojawiają się przyciski dotykowe ◀ ▶ ▼ ▲ ⚔.
 | Shift + ← → | ostrożny krok (zatrzymuje się na krawędzi i przed kolcami) |
 | ↑ | skok w górę / podciągnięcie / wyjście przez drzwi; z rozbiegu – skok w dal |
 | ↓ | kucnięcie (unik strzału); przy krawędzi – zwis; w zwisie – puszczenie |
-| A | podniesienie przedmiotu; w walce – cios (szybkie 2× = kombo) |
+| A | podniesienie przedmiotu; z ostrzem – wyciągnięcie go wcześniej (pozycja bojowa); w walce – cios (szybkie 2× = kombo) |
+| ↓ z wyciągniętym ostrzem | schowanie ostrza |
 | ↑ w walce | zasłona – odbija strzały i paruje ciosy |
 | R | powtórz poziom |
 

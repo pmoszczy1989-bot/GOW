@@ -195,7 +195,7 @@ function loadLevel(i) {
   P = {
     x: s.c * TW + 16, y: sky ? -70 : floorY(s.r), r: s.r, dir: s.dir, st: sky ? 'fall' : 'stand', t: 0,
     vx: 0, vy: 0, air: sky, fallY: sky ? -70 : floorY(s.r), soft: sky, hp: game.maxHp, max: game.maxHp,
-    sword: i > 0, hang: null, hit: false, fd: 0, inv: 0, combo: 0, q: false, ign: 0, trail: [],
+    sword: i > 0, drawn: false, hang: null, hit: false, fd: 0, inv: 0, combo: 0, q: false, ign: 0, trail: [],
   };
   FOES = LV.foes.map(mkFoe);
   LOOSE = []; spikes = {}; lamps = [];
@@ -441,6 +441,9 @@ function toFight() {
   P.st = 'fight'; P.t = 0;
 }
 
+// Po akcji bojowej: pozostań w pozycji walki, jeśli jest przeciwnik albo ostrze wyciągnięte ręcznie
+const afterFight = () => (engaged() || P.drawn) ? 'fight' : 'stand';
+
 function startStrike(chain) {
   const p = P;
   p.combo = chain ? p.combo ^ 1 : 0;
@@ -461,7 +464,8 @@ function updPlayer(dt) {
     startFall(0);
   }
   const fwd = p.dir > 0 ? K.right : K.left, back = p.dir > 0 ? K.left : K.right;
-  const lit = p.sword && (FIGHTST.includes(p.st) || (p.st === 'hurt' && engaged()));
+  if (p.air || p.st === 'dead') p.drawn = false;
+  const lit = p.sword && (FIGHTST.includes(p.st) || (p.st === 'hurt' && (p.drawn || engaged())));
   p.ign = Math.max(0, Math.min(1, p.ign + (lit ? 7 : -4) * dt));
 
   switch (p.st) {
@@ -482,6 +486,7 @@ function updPlayer(dt) {
         p.st = 'crouch'; p.t = 0; break;
       }
       if (PR.act && tryPick()) break;
+      if (PR.act && p.sword) { p.drawn = true; toFight(); break; }   // wcześniejsze wyciągnięcie ostrza
       if (back) { p.dir = -p.dir; p.st = 'turn'; p.t = 0; break; }
       if (fwd && !foeAhead(p.dir)) { p.st = (K.walk || K.act) ? 'step' : 'run'; p.t = 0; }
       break;
@@ -548,7 +553,7 @@ function updPlayer(dt) {
       }
       if (p.t >= 2.4) {
         p.sword = true; p.st = 'stand'; p.t = 0;
-        say('Kryształ rozbłysnął ' + game.blade.name + ' światłem! A – cios.', 3.5);
+        say('Kryształ rozbłysnął ' + game.blade.name + ' światłem! A – wyciągnij ostrze / cios.', 3.5);
       }
       break;
     }
@@ -565,11 +570,13 @@ function updPlayer(dt) {
     }
     case 'fight': {
       const t = engaged();
-      if (!t) { p.st = 'stand'; break; }
-      p.dir = Math.sign(t.x - p.x) || p.dir;
+      if (PR.down) { p.drawn = false; p.st = 'stand'; p.t = 0; SND.swing(); break; }   // schowanie ostrza
+      if (!t && !p.drawn) { p.st = 'stand'; break; }
+      if (t) p.dir = Math.sign(t.x - p.x) || p.dir;
       if (PR.act) { startStrike(false); break; }
       if (PR.up) { p.st = 'block'; p.t = 0; break; }
       const f = p.dir > 0 ? K.right : K.left, b = p.dir > 0 ? K.left : K.right;
+      if (!t && (p.dir > 0 ? PR.left : PR.right)) { p.dir = -p.dir; break; }   // bez przeciwnika – obrót
       if (f || b) { p.st = 'fstep'; p.t = 0; p.fd = f ? 1 : -1; }
       break;
     }
@@ -581,17 +588,17 @@ function updPlayer(dt) {
         if (!groundCheck(false)) break;
       }
       if (PR.act) { startStrike(false); break; }
-      if (p.t > 0.22) p.st = engaged() ? 'fight' : 'stand';
+      if (p.t > 0.22) p.st = afterFight();
       break;
     }
     case 'strike':
       if (PR.act && p.t > 0.1) p.q = true;
       if (!p.hit && p.t >= 0.12) { p.hit = true; resolveStrike(); }
       if (p.q && p.t >= 0.24) { startStrike(true); break; }
-      if (p.t > 0.34) p.st = engaged() ? 'fight' : 'stand';
+      if (p.t > 0.34) p.st = afterFight();
       break;
-    case 'block': if (p.t > 0.4) p.st = engaged() ? 'fight' : 'stand'; break;
-    case 'hurt': if (p.t > 0.3) p.st = (p.sword && engaged()) ? 'fight' : 'stand'; break;
+    case 'block': if (p.t > 0.4) p.st = afterFight(); break;
+    case 'hurt': if (p.t > 0.3) p.st = p.sword ? afterFight() : 'stand'; break;
     case 'jump':
     case 'fall': {
       const r = air(p, dt);
@@ -1531,7 +1538,7 @@ function hint() {
   if (p.st === 'dead') return 'R lub A – spróbuj ponownie';
   if (p.st === 'hang') return '↑ podciągnij się · ↓ puść krawędź';
   if (p.st === 'sword' || p.st === 'exit') return '';
-  if (FIGHTST.includes(p.st) || p.st === 'hurt') return 'A cios (2× kombo) · ↑ zasłona – odbija strzały · ←→ krok';
+  if (FIGHTST.includes(p.st) || p.st === 'hurt') return 'A cios (2× kombo) · ↑ zasłona · ←→ krok' + (p.drawn ? ' · ↓ schowaj' : '');
   if (ch === 'W') return 'A – podnieś rękojeść';
   if (ch === 'H' || ch === 'M') return 'A – wypij miksturę';
   if (atDoor()) return doorOpen() ? '↑ – wyjdź przez wrota' : 'Pokonaj Lorda, by zgasić pole siłowe';
