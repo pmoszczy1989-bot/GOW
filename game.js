@@ -633,7 +633,7 @@ function startStrike(chain) {
 // A bez przeciwnika: ostrze zapala się i od razu tnie (cięcie też odbija strzały)
 function drawStrike() {
   if (P.ign < 0.2) SND.ignite();
-  P.drawn = true; P.ign = Math.max(P.ign, 0.4);
+  P.drawn = true; P.ign = Math.max(P.ign, 0.05);
   startStrike(false);
 }
 
@@ -862,7 +862,7 @@ function updSwim(p, dt) {
       m.alive = false; MAP[m.r][m.c] = ' '; sparks(m.x, m.y, '#ffd060', 10); SND.clash(); say('Mina rozbrojona.', 1.2);
     }
   }
-  p.ign = Math.max(0, Math.min(1, p.ign + (p.sl > 0 ? 9 : -4) * dt));
+  p.ign = Math.max(0, Math.min(1, p.ign + (p.sl > 0 ? 3.6 : -3) * dt));
   if (Math.random() < dt * 3) parts.push({ x: p.x + p.dir * 6, y: p.y - 4, vx: (Math.random() - 0.5) * 8, vy: -20,
     life: 1.2, col: '#c0f0ff', g: -10, bub: true });
 }
@@ -987,7 +987,7 @@ function updPlayer(dt) {
   const fwd = p.dir > 0 ? K.right : K.left, back = p.dir > 0 ? K.left : K.right;
   if (p.air || p.st === 'dead') p.drawn = false;
   const lit = p.sword && (FIGHTST.includes(p.st) || (p.st === 'hurt' && (p.drawn || engaged())));
-  p.ign = Math.max(0, Math.min(1, p.ign + (lit ? 7 : -4) * dt));
+  p.ign = Math.max(0, Math.min(1, p.ign + (lit ? 3.6 : -3) * dt));   // ostrze wysuwa się ~0,28 s, chowa ~0,33 s
   // Kryształ zbierany w biegu
   if (!p.air && p.st !== 'dead' && HANGST.indexOf(p.st) < 0 && cell(p.r, colOf(p.x)) === 'O' &&
       Math.abs(colOf(p.x) * TW + 16 - p.x) < 12) {
@@ -2133,8 +2133,11 @@ function drawFig(x, y, dir, a, S, o) {
     let tx, ty;
     if (a.length > 22) { tx = x + dir * a[22]; ty = y + a[23]; }
     else { tx = h1[0] + (h1[0] - e1[0]) * 3; ty = h1[1] + (h1[1] - e1[1]) * 3; }
-    const vx = tx - h1[0], vy = ty - h1[1], n = Math.hypot(vx, vy) || 1, ux = vx / n, uy = vy / n, L = 18 * o.ign;
+    // Wysuwanie klingi z rękojeści (szybki start, miękkie dojście do pełnej długości)
+    const ext = 1 - Math.pow(1 - Math.min(1, o.ign), 3);
+    const vx = tx - h1[0], vy = ty - h1[1], n = Math.hypot(vx, vy) || 1, ux = vx / n, uy = vy / n, L = 18 * ext;
     seg([h1[0] - ux * 2, h1[1] - uy * 2], [h1[0] + ux, h1[1] + uy], 2, C('#b8c0cc'));
+    if (o.ign < 0.98) EQ.push({ x: h1[0] + ux * (2 + L), y: h1[1] + uy * (2 + L), col: '#ffffff', r: 5 + 4 * (1 - o.ign), a: 0.9 });
     BQ.push({ h: [h1[0] + ux * 2, h1[1] + uy * 2], t: [h1[0] + ux * (2 + L), h1[1] + uy * (2 + L)],
       bc: o.bc, trail: o.trail, own: o.own });
     // Ostrze dwustronne – druga klinga z tyłu rękojeści
@@ -2574,7 +2577,9 @@ function drawAuraFx() {
     ctx.strokeStyle = pull ? `rgba(150,200,255,${0.7 * (1 - k)})` : `rgba(200,220,255,${0.8 * (1 - k)})`;
     for (let i = 0; i < 3; i++) {
       ctx.lineWidth = 2 - i * 0.5;
-      ctx.beginPath(); ctx.arc(w.x, w.y, rad + i * 6 * (pull ? -1 : 1), w.dir > 0 ? -0.7 : Math.PI - 0.7, w.dir > 0 ? 0.7 : Math.PI + 0.7);
+      const rr = rad + i * 6 * (pull ? -1 : 1);
+      if (rr <= 0.5) continue;               // ujemny promień rzuca wyjątek i zatrzymywał pętlę gry
+      ctx.beginPath(); ctx.arc(w.x, w.y, rr, w.dir > 0 ? -0.7 : Math.PI - 0.7, w.dir > 0 ? 0.7 : Math.PI + 0.7);
       ctx.stroke();
     }
   }
@@ -2835,16 +2840,22 @@ function drawWin() {
 // ===== Pętla =====
 let last = 0, acc = 0;
 function frame(t) {
+  requestAnimationFrame(frame);             // najpierw – wyjątek w klatce nie zatrzyma całej gry
   const now = t / 1000;
   const dt = Math.min(0.1, now - (last || now));
   last = now; acc += dt;
-  while (acc >= STEP) {
-    update(STEP);
-    for (const k in PR) PR[k] = false;
-    acc -= STEP;
+  try {
+    while (acc >= STEP) {
+      update(STEP);
+      for (const k in PR) PR[k] = false;
+      acc -= STEP;
+    }
+    draw();
+  } catch (e) {
+    acc = 0;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    if (!frame.err) { frame.err = true; console.error(e); }
   }
-  draw();
-  requestAnimationFrame(frame);
 }
 
 loadLevel(0);
