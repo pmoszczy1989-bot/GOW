@@ -31,13 +31,21 @@ const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
 cv.width = SW; cv.height = SH;
 
+// Warstwa tekstu w pełnej rozdzielczości ekranu – napisy są gładkie, nie pikselowe
+const tv = document.getElementById('txt');
+const tctx = tv.getContext('2d');
+let TS = 1;                                 // piksele warstwy tekstu na 1 piksel gry
+
 function fit() {
   const W = window.innerWidth, H = window.innerHeight;
   let s = Math.min(W / SW, H / SH);
   const i = Math.floor(s);
   if (i >= 1 && i >= s * 0.85) s = i;      // całkowita skala, jeśli niewiele tracimy
-  cv.style.width = Math.floor(SW * s) + 'px';
-  cv.style.height = Math.floor(SH * s) + 'px';
+  const cw = Math.floor(SW * s), ch = Math.floor(SH * s), dpr = window.devicePixelRatio || 1;
+  cv.style.width = tv.style.width = cw + 'px';
+  cv.style.height = tv.style.height = ch + 'px';
+  tv.width = Math.round(cw * dpr); tv.height = Math.round(ch * dpr);
+  TS = tv.width / SW;
 }
 window.addEventListener('resize', fit);
 fit();
@@ -869,9 +877,7 @@ function drawGuard() {
   drawFig(g.x, y, g.dir, a, COL_G, swd);
   if (g.st === 'sleep') {
     const k = (game.anim * 0.8) % 1;
-    ctx.fillStyle = `rgba(220,220,255,${1 - k})`;
-    ctx.font = '7px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText('z', g.x - 4 + k * 4, g.y - 22 - k * 10);
+    txt('z', g.x - 2 + k * 4, g.y - 24 - k * 10, `rgba(220,220,255,${1 - k})`, 'center', 7 + k * 2, true);
   }
 }
 
@@ -991,10 +997,23 @@ function hint() {
   return '';
 }
 
-function txt(s, x, y, col, align) {
-  ctx.font = '8px monospace'; ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#000'; ctx.fillText(s, x + 1, y + 1);
-  ctx.fillStyle = col; ctx.fillText(s, x, y);
+// Tekst trafia do kolejki i jest rysowany na gładkiej warstwie #txt (współrzędne w pikselach gry)
+let TQ = [];
+function txt(s, x, y, col, align, size, noShadow) {
+  TQ.push({ s, x, y, col, align: align || 'center', size: size || 8, sh: !noShadow });
+}
+function drawText() {
+  tctx.setTransform(1, 0, 0, 1, 0, 0);
+  tctx.clearRect(0, 0, tv.width, tv.height);
+  tctx.setTransform(TS, 0, 0, TS, 0, 0);
+  tctx.textBaseline = 'middle';
+  for (const q of TQ) {
+    tctx.font = `bold ${q.size}px "Segoe UI", Tahoma, Verdana, sans-serif`;
+    tctx.textAlign = q.align;
+    if (q.sh) { tctx.fillStyle = 'rgba(0,0,0,0.85)'; tctx.fillText(q.s, q.x + 0.6, q.y + 0.6); }
+    tctx.fillStyle = q.col; tctx.fillText(q.s, q.x, q.y);
+  }
+  TQ = [];
 }
 
 function drawHUD() {
@@ -1010,6 +1029,7 @@ function drawHUD() {
 }
 
 function draw() {
+  TQ = [];
   ctx.drawImage(BG, 0, 0);
   [[112, 86], [240, 82], [104, 146], [272, 144]].forEach(([x, y]) => drawTorch(x, y));
   drawDynamic();
@@ -1026,17 +1046,18 @@ function draw() {
   if (game.mode !== 'title') drawHUD();
   if (game.mode === 'play' && P.st === 'dead' && P.t > 1.2) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 70, SW, 34);
-    txt('KONIEC', SW / 2, 80, '#e04030');
+    txt('KONIEC', SW / 2, 80, '#e04030', 'center', 11);
     txt('R / ⚔ – spróbuj jeszcze raz', SW / 2, 94, '#e0d0b0');
   }
   if (game.mode === 'win') {
     ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, SW, 180);
     const m = Math.floor(game.time / 60), sec = Math.floor(game.time % 60);
-    txt('WOLNOŚĆ!', SW / 2, 60, '#f0c040');
+    txt('WOLNOŚĆ!', SW / 2, 58, '#f0c040', 'center', 16);
     txt('Uciekłeś z lochów pałacu.', SW / 2, 80, '#e8d8b0');
     txt('Czas: ' + m + ':' + String(sec).padStart(2, '0') + '   Życie: ' + P.hp + '/' + P.max, SW / 2, 96, '#e8d8b0');
     txt('R / ⚔ – zagraj ponownie', SW / 2, 124, '#a0a0b0');
   }
+  drawText();
 }
 
 // ===== Pętla =====

@@ -12,6 +12,7 @@ Single-screen pixel-art platformer in the style of the classic Prince of Persia 
 
 - `game.js` – one plain script (no modules): constants, level `LEVEL0`, state (`P`, `GD`, `loose`, `gate`, `spikes`), state-machine updates (`updPlayer`, `updGuard`, `updLoose`, `updGate`), drawing (`buildBG` prerender, `drawDynamic`, `drawFig` + `POSE` joint tables), WebAudio `SND`, fixed 1/60 s loop.
 - Internal resolution 320×200, 3 rows × 10 tiles (`TW=32`, `RH=60`), `floorY(r)=(r+1)*60-5`, HUD at y 180–200.
+- All text goes through `txt()` (queued, drawn by `drawText()` on the full-resolution overlay canvas `#txt`, sized in `fit()`); never `fillText` on the pixel canvas.
 
 ## Conventions
 

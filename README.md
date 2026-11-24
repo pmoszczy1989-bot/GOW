@@ -26,6 +26,8 @@ Na telefonie/tablecie pojawiają się przyciski dotykowe ◀ ▶ ▼ ▲ ⚔.
 
 ## Poziom
 
+Grafika jest rysowana w 320×200 i skalowana pikselowo; napisy (`txt()`) trafiają na osobną warstwę `#txt` w pełnej rozdzielczości ekranu, więc są gładkie.
+
 Ekran 320×200 px, 3 rzędy × 10 kafli (kafel 32 px, rząd 60 px). Definicja w `LEVEL0` (`game.js`):
 
 ```

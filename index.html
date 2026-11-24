@@ -9,6 +9,7 @@
     user-select: none; -webkit-user-select: none; }
   #game { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     image-rendering: pixelated; image-rendering: crisp-edges; }
+  #txt { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 1; }
   #title { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     background: rgba(0, 0, 0, .88); color: #e8d8b0; font: 14px/1.5 monospace; text-align: center;
     padding: 16px; box-sizing: border-box; z-index: 5; cursor: pointer; }
@@ -30,6 +31,7 @@
 </head>
 <body>
 <canvas id="game" width="320" height="200"></canvas>
+<canvas id="txt"></canvas>
 
 <div id="title">
   <div class="box">
@@ -52,6 +54,6 @@
   <div class="g"><button data-k="down">▼</button><button data-k="up">▲</button><button data-k="act">⚔</button></div>
 </div>
 
-<script src="game.js?v=3"></script>
+<script src="game.js?v=4"></script>
 </body>
 </html>
