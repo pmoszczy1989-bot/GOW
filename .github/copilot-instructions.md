@@ -1,22 +1,22 @@
 # Copilot instructions – GOW
 
-Single-screen pixel-art platformer in the style of the classic Prince of Persia (1989). Polish docs in `README.md`.
+Single-screen pixel-art platformer modelled on the classic Prince of Persia (1989), set in an original space-knight setting (energy blades, blaster troopers, a red-blade boss). Polish docs in `README.md`.
 
 ## Run / test
 
 - No build, no dependencies: open `index.html` directly (works from `file://`).
 - Syntax check: `node --check game.js`.
-- Headless test from the browser console via `window.GOW` (`start()`, `update(dt)`, `K`/`PR` input maps, `P` player, `G` guard). Step with `update(GOW.STEP)` and clear `PR` after each step.
+- Headless test from the browser console via `window.GOW` (`newGame()`, `loadLevel(i)`, `update(dt)`, `K`/`PR` input maps, `P` player, `FOES`, `BOLTS`). Step with `update(GOW.STEP)` and clear `PR` after each step.
 
 ## Architecture
 
-- `game.js` – one plain script (no modules): constants, level `LEVEL0`, state (`P`, `GD`, `loose`, `gate`, `spikes`), state-machine updates (`updPlayer`, `updGuard`, `updLoose`, `updGate`), drawing (`buildBG` prerender, `drawDynamic`, `drawFig` + `POSE` joint tables), WebAudio `SND`, fixed 1/60 s loop.
-- Internal resolution 320×200, 3 rows × 10 tiles (`TW=32`, `RH=60`), `floorY(r)=(r+1)*60-5`, HUD at y 180–200.
-- All text goes through `txt()` (queued, drawn by `drawText()` on the full-resolution overlay canvas `#txt`, sized in `fit()`); never `fillText` on the pixel canvas.
+- `game.js` – one plain script (no modules): `LEVELS` (5 maps, 3 rows × 10 tiles + foes), `BLADES` (hero blade colours, never red), state (`game`, `P`, `FOES`, `BOLTS`, `gate`), updates (`updPlayer`, `updTrooper`, `updLord`, `boltHitsPlayer`), drawing (`buildBG` per-level prerender with `THEMES`, `drawFig` + `STY`, `slashPose`, `lighting`, `drawEmissive`), WebAudio, fixed 1/60 s loop.
+- Internal resolution 320×200 (`TW=32`, `RH=60`), HUD at y 180–200.
+- All text goes through `txt()` (drawn on the full-resolution overlay canvas `#txt`); never `fillText` on the pixel canvas.
 
 ## Conventions
 
-- No external assets or dependencies; all art is drawn in code. Do not copy original Prince of Persia assets.
+- No external assets or dependencies; all art is drawn in code. Do not copy original Prince of Persia assets or use trademarked franchise names (no "Jedi", "Sith", "lightsaber").
 - After changing `game.js`, bump `?v=N` in `index.html`.
 - Comments, UI text and docs in Polish. Files UTF-8 without BOM, LF.
-- Keep `README.md` (controls, legend, rules) in sync with code.
+- Keep `README.md` (controls, levels, rules) in sync with code.
