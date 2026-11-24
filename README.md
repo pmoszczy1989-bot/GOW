@@ -1,79 +1,109 @@
 # GOW – Rycerze Ostrza
 
-Jednoekranowa platformówka pixel-art inspirowana klasycznym **Prince of Persia (1989)**,
-osadzona w realiach kosmicznej opowieści o rycerzach z ostrzami energii.
-Spadasz z nieba na dach cytadeli, odnajdujesz rękojeść ostrza (losowy kolor – nigdy czerwony),
-przebijasz się przez 5 poziomów lochów pełnych żołnierzy z blasterami i karabinami,
-a na końcu rozdziału staczasz pojedynek z **Mrocznym Lordem** o czerwonym ostrzu.
+Platformówka inspirowana klasycznym **Prince of Persia (1989)**, osadzona w realiach kosmicznej opowieści
+o rycerzach z ostrzami energii. Spadasz z nieba na dach cytadeli, odnajdujesz rękojeść ostrza
+(losowy kolor – nigdy czerwony) i przechodzisz trzy rozdziały: **Cytadelę**, **pustynię Sarrak**
+i **głębiny Thalos**. Między planetami lecisz myśliwcem. Każdy rozdział kończy Lord z czerwonym ostrzem.
 Grafika, dźwięki, postacie i nazwy są autorskie – z inspiracji zapożyczona jest tylko mechanika.
 
 ## Uruchomienie
 
 Bez instalacji i serwera: otwórz `index.html` w przeglądarce (działa z `file://`, offline).
-Na telefonie/tablecie pojawiają się przyciski dotykowe ◀ ▶ ▼ ▲ ⚔.
+Przycisk ⛶ w prawym górnym rogu (albo klawisz **F**) przełącza pełny ekran. Na komputerze na dole
+widać pasek z podpowiedziami klawiszy.
+
+**Telefon / tablet** – wykrywane automatycznie (dotyk + gruby wskaźnik albo brak myszy → klasa `body.touch`).
+Gra skaluje się do ekranu (w pionie jest u góry, sterowanie pod nią). W lewym dolnym rogu jest gałka
+(mocne wychylenie w bok – bieg, lekkie – ostrożny krok, w górę – skok, w dół – zwis/kucnięcie),
+w prawym przyciski z ikonami: ostrze/cios, skok, przyciągnięcie, odepchnięcie, schowanie ostrza.
 
 ## Sterowanie
 
 | Klawisz | Akcja |
 |---|---|
-| ← → | bieg / obrót |
+| ← → | bieg / obrót; pod wodą – pływanie |
 | Shift + ← → | ostrożny krok (zatrzymuje się na krawędzi i przed kolcami) |
-| ↑ | skok w górę / podciągnięcie / wyjście przez drzwi; z rozbiegu – skok w dal |
-| ↓ | kucnięcie (unik strzału); przy krawędzi – zwis; w zwisie – puszczenie |
-| A | podniesienie przedmiotu / użycie terminala lub konsoli; z ostrzem – wyciągnięcie ostrza i od razu cios (szybkie 2× = kombo); cięcie odbija strzały i rozbija skrzynie |
+| ↑ | skok w górę / podciągnięcie / wyjście przez drzwi; z rozbiegu – skok w dal; pod wodą – w górę, przy brzegu – wyjście |
+| ↓ | kucnięcie (unik strzału); przy krawędzi – zwis; w zwisie – puszczenie; pod wodą – w dół |
+| A | podniesienie / użycie terminala lub konsoli; z ostrzem – wyciągnięcie i cios (2× = kombo); cięcie odbija strzały i rozbija skrzynie |
 | S | schowanie ostrza |
+| Z | przyciągnięcie aurą (wróg, dron, kryształ lub mikstura) – potem szybko **A** = cios aury |
+| X | fala odpychająca aury (odrzuca wrogów, strzały, rozbija skrzynie) |
 | ↑ w walce | zasłona – odbija strzały i paruje ciosy |
 | R | powtórz poziom |
+| F | pełny ekran |
+
+Lot statkiem: ←→↑↓ ruch, **A** działa (przytrzymaj), **Z** torpeda, **X** beczka (unik).
 
 ## Poziomy
 
-Ekran 320×200 px, 3 rzędy × 10 kafli (kafel 32 px, rząd 60 px). Definicje w `LEVELS` (`game.js`):
+Ekran 320×200 px, komnata 3 rzędy × 10 kafli (kafel 32 px, rząd 60 px). Poziom może mieć kilka komnat –
+wyjście za krawędź ekranu przenosi do sąsiedniej. Definicje w `levels.js` (`LEVELS`, 17 poziomów):
 
-1. **Dach Cytadeli** – luźna płyta, rękojeść ostrza, śpiący żołnierz z blasterem, skrzynia, terminal, płyta i krata.
-2. **Blok więzienny** – blaster i karabin, kolce, konsola i bariera energetyczna, krata przy drzwiach.
-3. **Kuźnia reaktora** – wspinaczka, duża mikstura (+1 życia), skrzynia, terminal, karabin i blaster.
-4. **Zalane tunele** – luźne płyty, bariera i konsola, trzech strzelców.
-5. **Sala Mrocznego Lorda** – karabin i boss z czerwonym ostrzem; drzwi otwierają się po jego pokonaniu.
+- **Rozdział I – Cytadela**: Dach Cytadeli, Blok więzienny, Kuźnia reaktora, Zalane tunele, Sala Mrocznego Lorda.
+- **Przelot**: Ucieczka z orbity (myśliwiec, eskadry, krążownik).
+- **Rozdział II – Sarrak (pustynia)**: Wydmy Sarrak, Kanion Echa, Ruiny Świątyni Słońca, Grobowiec Burz, Tron Pani Burz
+  (ruchome piaski, platformy, najeźdźcy w zawojach, Lord z dwustronnym ostrzem).
+- **Przelot**: Blokada orbitalna (trudniejsza).
+- **Rozdział III – Thalos (podwodna stacja)**: Stacja Thalos – śluza, Zatopione hangary, Rafa wraków, Kopuła Głębin,
+  Leże Lorda Głębin (pływanie, tlen, wyloty powietrza, miny, drony, Lord z dwoma ostrzami).
 
-Legenda: `_` podłoga · spacja – przepaść · `#` mur · `L` luźna płyta · `S` kolce · `W` rękojeść ·
-`H` mikstura · `M` duża mikstura · `P` płyta naciskowa · `G` krata · `D` drzwi · `B` skrzynia ·
-`O` kryształ energii · `T` terminal z zapiskami · `K` konsola · `E` bariera energetyczna.
+Każdy kolejny poziom jest trochę trudniejszy (więcej i silniejszych wrogów, krótsze okna, więcej pułapek).
+
+Legenda: `_` podłoga · spacja – brak podłogi (w dolnym rzędzie przepaść, pod wodą dno) · `#` mur ·
+`L` luźna płyta · `S` kolce · `W` rękojeść · `H` mikstura · `M` duża mikstura · `P` płyta naciskowa ·
+`G` krata · `D` drzwi · `B` skrzynia · `O` kryształ · `T` terminal · `K` konsola · `E` bariera energetyczna ·
+`Q` ruchome piaski · `U` wylot powietrza · `N` mina podwodna.
+Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0, c1, sp }`,
+`wl` poziom wody w px (125 – zalany dolny rząd, -100 – cała komnata pod wodą).
 
 ## Zasady
 
 - Życie: trójkąty (start 3). Upadek o 1 rząd – bez obrażeń, o 2 – −1, o 3+ – śmierć.
-- Po trafieniu chwila nietykalności (miganie).
-- Żołnierze patrolują swój odcinek; widzą tylko przed sobą (z bliska też słyszą). Gdy cię zauważą,
-  trzymają dystans strzału, cofają się przed ostrzem, przestępują i po trafieniu czasem odskakują.
-  Blaster – pojedyncze strzały, 3 trafienia; karabin – seria 2, 4 trafienia (od poziomu 4 obaj +1).
-  Kucnięcie przepuszcza strzał, zasłona lub cięcie odbija go we wroga. Z bliska żołnierz uderza kolbą.
-- Mroczny Lord (10 trafień) paruje, robi odskoki i pchnięcia; przy 5 życiach wpada w furię (szybszy).
-- Ostatni cios uruchamia finiszer w zwolnionym tempie z pasami kinowymi (wirowe cięcie, cios z wyskoku
-  albo pchnięcie): broń żołnierza zostaje rozcięta, a Lord gaśnie i rozpada się w żar – bez krwi.
-- Krata otwiera się po naciśnięciu płyty i po chwili opada. Konsola `K` wyłącza bariery i blokuje kratę w górze.
-- Bariera `E` pulsuje (2 s włączona, 1,2 s wyłączona, przed włączeniem miga); dotknięcie – −1 życia.
-- Kryształy `O` zbiera się w biegu (licznik ◆ w rogu); skrzynie `B` rozbija cięcie – w środku
-  mikstura (gdy brakuje życia) albo kryształ.
+- Wrogowie widzą cię dopiero z bliższej odległości (znak `?` – coś słyszą, `!` – zauważyli).
+  Patrolują, trzymają dystans strzału, cofają się przed ostrzem. Blaster 3 trafienia, karabin 4 (później więcej).
+  Kucnięcie przepuszcza strzał, zasłona lub cięcie odbija go we wroga.
+- Lord (10 trafień) paruje, odskakuje i wpada w furię przy 5 życiach.
+- **Aura** (pasek pod życiem, odnawia się): przyciągnięcie (Z) uruchamia quick time event – szybkie **A**
+  daje efektowne zakończenie; Lordowi zabiera 2 życia, ale Lord potrafi się opierać przyciąganiu
+  i kontratakuje, gdy zareagujesz za wolno. Fala (X) odrzuca wrogów i strzały.
+- Ostatni cios uruchamia finiszer w zwolnionym tempie – bez krwi (iskry, rozcięta broń, żar).
+- Woda: pod wodą ubywa tlenu (pasek O₂); uzupełnia go powierzchnia i wylot `U`. Bez tlenu tracisz życie.
+- Ruchome piaski `Q` spowalniają i wciągają – nie zatrzymuj się. Miny `N` wybuchają przy dotyku (cięcie pod wodą je rozbraja).
+- Krata otwiera się po naciśnięciu płyty, konsola `K` wyłącza bariery i blokuje kratę w górze.
 
 ## Pliki
 
 | Plik | Opis |
 |---|---|
-| `index.html` | płótna, ekran tytułowy, przyciski dotykowe; ładuje `game.js?v=N` |
-| `game.js` | cała gra: poziomy, stan, fizyka, gracz, wrogowie, pułapki, rysowanie, światło, dźwięk, pętla |
+| `index.html` | płótna, ekran tytułowy, przycisk ⛶, pasek klawiszy `#keys`, sterowanie dotykowe `#touch` (`#stick`/`#knob`, `button[data-k]`); ładuje skrypty `?v=N` |
+| `levels.js` | `LEVELS` – definicje poziomów i komnat (ładowany pierwszy) |
+| `game.js` | silnik: wejście (klawiatura, dotyk, pełny ekran), stan, komnaty, fizyka, gracz, wrogowie, aura, QTE, pływanie, pułapki, rysowanie, światło, dźwięk, pętla |
+| `ship.js` | poziomy lotu statkiem (`startShip`, `updShip`, `drawShip`, `shipHint`, `SHIP`) |
 
-Kluczowe funkcje: `loadLevel`, `newGame`, `restart`, `finishLevel`, `update(dt)` (stały krok 1/60 s),
-`updPlayer`, `drawStrike`, `startFinisher` (`FIN`), `hitFoe`, `updTrooper` (`patrol`, `foeMove`), `updLord`,
-`boltHitsPlayer`, `tryUse`, `breakCrate`, `updBarriers`, `debris`/`updDebris`, `buildBG` (tło wg `THEMES`),
-`drawFig` (style postaci `STY`), `slashPose`/`finPose` (animacje ciosów), `lighting` (mrok, światła, winieta),
-`drawEmissive` (ostrza ze smugą, strzały, iskry), `draw`.
+Kolejność skryptów: `levels.js → game.js → ship.js`.
 
-Współrzędne gry to 320×200, ale płótno renderuje w 2–4× wyższej rozdzielczości (`RS`, wg ekranu) –
-gładkie linie, zaokrąglone kształty i poświaty zamiast pikseli. Napisy (`txt()`) trafiają na warstwę `#txt`
-w pełnej rozdzielczości ekranu, więc są gładkie.
+Kluczowe funkcje: `loadLevel`, `mkRoom`/`enterRoom`/`roomCheck` (komnaty), `update(dt)` (krok 1/60 s),
+`updPlayer`, `auraPull`/`auraPush`/`updQte`, `startSwim`/`updO2`, `updPlats`, `updMines`, `startFinisher`,
+`hitFoe`, `updTrooper`, `updLord`, `buildBG` (tło wg `THEMES`, klucz `BGS[lvl:komnata]`), `drawFig` (style `STY`),
+`gait` (chód/bieg z kinematyką nóg), `drawWater`, `drawAuraFx`, `lighting`, `drawEmissive`, `draw`, `drawWin`, `fit`.
+
+Współrzędne gry to 320×200; płótno renderuje w 2–4× wyższej rozdzielczości (`RS`). Napisy (`txt()`) trafiają na
+warstwę `#txt` w pełnej rozdzielczości ekranu.
 
 ## Test
 
-W konsoli przeglądarki dostępny jest obiekt `window.GOW` (`P`, `FOES`, `BOLTS`, `gate`, `lvl`, `game`,
-`K`, `PR`, `LEVELS`, `update`, `draw`, `loadLevel`, `newGame`, `restart`, `start`, `STEP`).
-Szybka kontrola składni: `node --check game.js`.
+W konsoli przeglądarki dostępny jest obiekt `window.GOW` (`P`, `FOES`, `BOLTS`, `gate`, `lvl`, `ROOMS`, `ri`, `RD`,
+`MINES`, `PLATS`, `SHIP`, `game`, `K`, `PR`, `LEVELS`, `update`, `draw`, `loadLevel`, `enterRoom`, `newGame`,
+`restart`, `start`, `STEP`). Przykład – każdy poziom bez wyjątków:
+
+```js
+window.requestAnimationFrame = () => {};
+for (let i = 0; i < GOW.LEVELS.length; i++) {
+  GOW.loadLevel(i);
+  for (let s = 0; s < 600; s++) { GOW.update(GOW.STEP); for (const k in GOW.PR) delete GOW.PR[k]; }
+  GOW.draw();
+}
+```
+
+Szybka kontrola składni: `node --check game.js levels.js ship.js` (każdy plik osobno).

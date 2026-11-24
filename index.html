@@ -3,59 +3,148 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
 <title>GOW – Rycerze Ostrza</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none;
-    user-select: none; -webkit-user-select: none; }
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   #game { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
   #txt { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 1; }
+
+  /* Przycisk pełnego ekranu */
+  #full { position: absolute; top: max(6px, env(safe-area-inset-top)); right: max(6px, env(safe-area-inset-right));
+    z-index: 6; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .3);
+    background: rgba(20, 20, 30, .55); color: #e8d8b0; font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
+  #full:hover { background: rgba(240, 192, 64, .3); }
+
+  /* Dolny pasek z podpowiedziami klawiszy (komputer) */
+  #keys { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 4px 14px; padding: 5px 8px; background: #0b0b12; border-top: 1px solid #2a2a3a;
+    color: #a8a0c0; font: 12px/1.4 "Segoe UI", Tahoma, sans-serif; }
+  #keys span { white-space: nowrap; }
+  #keys kbd { display: inline-block; min-width: 14px; text-align: center; background: #22222e; border: 1px solid #4a4a5e;
+    border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; margin-right: 3px; color: #f0e0b8; font: bold 11px/1.5 monospace; }
+  body.touch #keys { display: none; }
+
+  /* Ekran tytułowy */
   #title { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(0, 0, 0, .88); color: #e8d8b0; font: 14px/1.5 monospace; text-align: center;
-    padding: 16px; box-sizing: border-box; z-index: 5; cursor: pointer; }
+    background: rgba(0, 0, 0, .9); color: #e8d8b0; font: 14px/1.5 "Segoe UI", Tahoma, sans-serif; text-align: center;
+    padding: 16px; box-sizing: border-box; z-index: 5; cursor: pointer; overflow: auto; }
   #title.hide { display: none; }
-  #title .box { max-width: 580px; }
-  #title h1 { font-size: 44px; margin: 0 0 4px; color: #f0c040; letter-spacing: 8px; text-shadow: 3px 3px 0 #802010; }
-  #title .sub { color: #a89878; margin: 0 0 14px; }
-  #title kbd { background: #2a2a2a; border: 1px solid #666; border-radius: 3px; padding: 0 4px; color: #fff; }
+  #title .box { max-width: 640px; }
+  #title h1 { font: bold 46px/1 monospace; margin: 0 0 4px; color: #f0c040; letter-spacing: 8px; text-shadow: 3px 3px 0 #802010; }
+  #title .sub { color: #a89878; margin: 0 0 12px; }
+  #title kbd { background: #2a2a2a; border: 1px solid #666; border-radius: 3px; padding: 0 4px; color: #fff; font-family: monospace; }
   #title .go { color: #f0c040; animation: blink 1s steps(2) infinite; }
+  #title .mob { display: none; }
+  body.touch #title .pc { display: none; }
+  body.touch #title .mob { display: block; }
   @keyframes blink { 50% { opacity: .3; } }
-  #touch { position: absolute; bottom: max(8px, env(safe-area-inset-bottom)); left: 0; right: 0; display: none;
-    justify-content: space-between; padding: 0 12px; z-index: 4; pointer-events: none; }
-  body.touch #touch { display: flex; }
-  #touch .g { display: flex; gap: 8px; pointer-events: auto; }
-  #touch button { width: 58px; height: 58px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, .35);
-    background: rgba(255, 255, 255, .1); color: #fff; font-size: 24px; padding: 0; }
-  #touch button.on { background: rgba(240, 192, 64, .45); }
+
+  /* Sterowanie dotykowe: gałka w lewym dolnym rogu, przyciski akcji w prawym */
+  #touch { position: absolute; left: 0; right: 0; bottom: 0; height: 0; display: none; z-index: 4; pointer-events: none; }
+  body.touch #touch { display: block; }
+  #stick { position: absolute; left: max(18px, env(safe-area-inset-left)); bottom: max(18px, env(safe-area-inset-bottom));
+    width: 132px; height: 132px; border-radius: 50%; pointer-events: auto; touch-action: none;
+    background: radial-gradient(circle, rgba(255, 255, 255, .06) 0 40%, rgba(255, 255, 255, .12) 41% 100%);
+    border: 2px solid rgba(255, 255, 255, .3); box-sizing: border-box; }
+  #stick::before { content: ''; position: absolute; inset: 6px; border-radius: 50%;
+    background: conic-gradient(from -22.5deg, rgba(255,255,255,.12) 0 45deg, transparent 0 90deg, rgba(255,255,255,.12) 0 135deg,
+      transparent 0 180deg, rgba(255,255,255,.12) 0 225deg, transparent 0 270deg, rgba(255,255,255,.12) 0 315deg, transparent 0); opacity: .5; }
+  #stick.on { border-color: rgba(240, 192, 64, .7); }
+  #knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, .55), rgba(150, 160, 190, .35));
+    border: 2px solid rgba(255, 255, 255, .5); box-sizing: border-box; pointer-events: none; }
+  #acts { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom));
+    width: 196px; height: 172px; pointer-events: none; }
+  #acts button { position: absolute; width: 58px; height: 58px; border-radius: 50%; padding: 0; pointer-events: auto; touch-action: none;
+    border: 2px solid rgba(255, 255, 255, .38); background: rgba(20, 22, 34, .45); color: #fff; }
+  #acts button svg { width: 32px; height: 32px; display: block; margin: auto; }
+  #acts button.on { background: rgba(240, 192, 64, .5); border-color: #f0c040; }
+  #acts .big { width: 72px; height: 72px; }
+  #acts .big svg { width: 42px; height: 42px; }
+  #acts .act { right: 0; bottom: 0; border-color: rgba(120, 220, 255, .7); }
+  #acts .up { right: 82px; bottom: 0; }
+  #acts .pull { right: 0; bottom: 82px; border-color: rgba(150, 190, 255, .6); }
+  #acts .push { right: 66px; bottom: 68px; border-color: rgba(150, 190, 255, .6); }
+  #acts .sheathe { right: 138px; bottom: 50px; width: 46px; height: 46px; }
+  #acts .sheathe svg { width: 26px; height: 26px; }
+  #acts small { position: absolute; left: 0; right: 0; bottom: -1px; font: bold 9px sans-serif; color: rgba(255,255,255,.75); }
+  @media (max-height: 380px) {
+    #stick { width: 112px; height: 112px; }
+    #knob { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
+    #acts { transform: scale(.85); transform-origin: right bottom; }
+  }
 </style>
 </head>
 <body>
 <canvas id="game" width="320" height="200"></canvas>
 <canvas id="txt"></canvas>
+<button id="full" title="Pełny ekran (F)">⛶</button>
 
 <div id="title">
   <div class="box">
     <h1>GOW</h1>
     <p class="sub">Rycerze Ostrza · w hołdzie klasycznemu Prince of Persia (1989)</p>
-    <p>Spadasz z nocnego nieba na dach Cytadeli Mrocznego Lorda.<br>
-      Odnajdź rękojeść ostrza energii, przebij się przez 5 poziomów lochów<br>
-      pełnych szturmowców z blasterami i pokonaj Lorda z czerwonym ostrzem.</p>
-    <p>
-      <kbd>←</kbd><kbd>→</kbd> bieg &nbsp; <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> ostrożny krok<br>
-      <kbd>↑</kbd> skok / podciągnięcie / wrota &nbsp; <kbd>↑</kbd>+<kbd>→</kbd> skok w dal<br>
-      <kbd>↓</kbd> kucnięcie (unik strzału) / zwis z krawędzi<br>
-      <kbd>A</kbd> wyciągnij ostrze i tnij (2× – kombo, cięcie odbija strzały) / podnieś / użyj &nbsp; <kbd>S</kbd> schowaj ostrze<br>
-      <kbd>↑</kbd> w walce – zasłona &nbsp; ostatni cios = finiszer w zwolnionym tempie<br>
-      <kbd>R</kbd> powtórz poziom
+    <p>Spadasz z nocnego nieba na dach Cytadeli Mrocznego Lorda. Odnajdź rękojeść ostrza energii
+      i przejdź trzy rozdziały: <b>Cytadelę</b>, <b>pustynię Sarrak</b> i <b>głębiny Thalos</b> – po 5 poziomów,
+      z wieloma komnatami, pływaniem, ruchomymi piaskami i platformami. Między planetami lecisz myśliwcem
+      i walczysz z eskadrami wroga. Każdy rozdział kończy Lord z czerwonym ostrzem.</p>
+    <p class="pc">
+      <kbd>←</kbd><kbd>→</kbd> bieg &nbsp; <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> ostrożny krok &nbsp; <kbd>↑</kbd> skok / zasłona &nbsp; <kbd>↓</kbd> kucnięcie / zwis<br>
+      <kbd>A</kbd> wyciągnij ostrze i tnij (odbija strzały) / podnieś / użyj &nbsp; <kbd>S</kbd> schowaj ostrze<br>
+      <kbd>Z</kbd> przyciągnięcie aurą – potem szybko <kbd>A</kbd> = efektowne zakończenie &nbsp; <kbd>X</kbd> fala odpychająca<br>
+      Pod wodą <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> pływanie (pilnuj tlenu) &nbsp; <kbd>R</kbd> powtórz poziom &nbsp; <kbd>F</kbd> pełny ekran
     </p>
-    <p class="go">Naciśnij dowolny klawisz lub dotknij ekranu</p>
+    <p class="mob">Gałka w lewym dolnym rogu – ruch (lekkie wychylenie = ostrożny krok).<br>
+      Przyciski po prawej: ostrze / cios, skok, przyciągnięcie, odepchnięcie, schowanie ostrza.<br>
+      Najlepiej grać poziomo i w pełnym ekranie (⛶).</p>
+    <p class="go"><span class="pc">Naciśnij dowolny klawisz</span><span class="mob">Dotknij ekranu, aby zacząć</span></p>
   </div>
 </div>
 
-<div id="touch">
-  <div class="g"><button data-k="left">◀</button><button data-k="right">▶</button></div>
-  <div class="g"><button data-k="down">▼</button><button data-k="up">▲</button><button data-k="act">⚔</button><button data-k="sheathe">S</button></div>
+<div id="keys">
+  <span><kbd>←</kbd><kbd>→</kbd>ruch</span>
+  <span><kbd>Shift</kbd>krok</span>
+  <span><kbd>↑</kbd>skok</span>
+  <span><kbd>↓</kbd>zwis</span>
+  <span><kbd>A</kbd>ostrze / cios</span>
+  <span><kbd>S</kbd>schowaj</span>
+  <span><kbd>Z</kbd>przyciągnij</span>
+  <span><kbd>X</kbd>odepchnij</span>
+  <span><kbd>R</kbd>restart</span>
+  <span><kbd>F</kbd>pełny ekran</span>
 </div>
 
-<script src="game.js?v=9"></script>
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <div id="acts">
+    <!-- Ostrze / cios -->
+    <button class="act big" data-k="act" aria-label="Ostrze / cios"><svg viewBox="0 0 32 32">
+      <line x1="9" y1="23" x2="26" y2="6" stroke="#7fe0ff" stroke-width="4" stroke-linecap="round"/>
+      <line x1="9" y1="23" x2="26" y2="6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="4" y1="28" x2="10" y2="22" stroke="#c0c8d4" stroke-width="3.4" stroke-linecap="round"/>
+      <line x1="7" y1="19" x2="13" y2="25" stroke="#8a94a4" stroke-width="2" stroke-linecap="round"/></svg></button>
+    <!-- Skok -->
+    <button class="up" data-k="up" aria-label="Skok"><svg viewBox="0 0 32 32">
+      <path d="M16 5 L26 17 H20 V27 H12 V17 H6 Z" fill="#f0e0b8"/></svg></button>
+    <!-- Przyciągnięcie aurą -->
+    <button class="pull" data-k="pull" aria-label="Przyciągnij"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
+      <path d="M27 6 Q19 16 27 26"/><path d="M21 9 Q15 16 21 23"/><path d="M15 16 H4"/><path d="M8 12 L4 16 L8 20"/></svg></button>
+    <!-- Fala odpychająca -->
+    <button class="push" data-k="push" aria-label="Odepchnij"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
+      <path d="M17 6 Q25 16 17 26"/><path d="M23 9 Q29 16 23 23"/><path d="M4 16 H14"/><path d="M10 12 L14 16 L10 20"/></svg></button>
+    <!-- Schowaj ostrze -->
+    <button class="sheathe" data-k="sheathe" aria-label="Schowaj ostrze"><svg viewBox="0 0 32 32">
+      <rect x="13" y="6" width="6" height="16" rx="2" fill="#8a94a4"/><rect x="11" y="21" width="10" height="3" rx="1" fill="#c0c8d4"/>
+      <path d="M16 25 V30 M12 27 L16 30 L20 27" stroke="#f0e0b8" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
+  </div>
+</div>
+
+<script src="levels.js?v=10"></script>
+<script src="game.js?v=10"></script>
+<script src="ship.js?v=10"></script>
 </body>
 </html>

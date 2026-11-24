@@ -5,19 +5,22 @@ Single-screen pixel-art platformer modelled on the classic Prince of Persia (198
 ## Run / test
 
 - No build, no dependencies: open `index.html` directly (works from `file://`).
-- Syntax check: `node --check game.js`.
-- Headless test from the browser console via `window.GOW` (`newGame()`, `loadLevel(i)`, `update(dt)`, `K`/`PR` input maps, `P` player, `FOES`, `BOLTS`). Step with `update(GOW.STEP)` and clear `PR` after each step.
+- Syntax check: `node --check game.js`, `node --check levels.js`, `node --check ship.js`.
+- Headless test from the browser console via `window.GOW` (`loadLevel(i)`, `enterRoom(k)`, `update(dt)`, `K`/`PR` input maps, `P` player, `FOES`, `BOLTS`, `ROOMS`/`ri`/`RD`, `SHIP`). Set `window.requestAnimationFrame = () => {}`, step with `update(GOW.STEP)` and clear `PR` after each step. Load every level and run updates/draws to check for exceptions.
 
 ## Architecture
 
-- `game.js` – one plain script (no modules): `LEVELS` (5 maps, 3 rows × 10 tiles + foes; tiles `_ # L S W H M P G D` plus interactive `B` crate, `O` crystal, `T` terminal, `K` console, `E` pulsing barrier), `BLADES` (hero blade colours, never red), state (`game`, `P`, `FOES`, `BOLTS`, `DEBRIS`, `gate`, `used`), updates (`updPlayer`, `updTrooper` with patrol/awareness `aw`, `updLord` with hop/fury, `hitFoe` → foe state `fin` then `fdead`/`gone`, `startFinisher` + player state `fin` with slow-mo `game.slowT` and letterbox `game.bars`, `boltHitsPlayer`), drawing (`buildBG` per-level prerender with `THEMES`, `drawFig` + `STY`, `slashPose`/`finPose`, `lighting`, `drawEmissive`), WebAudio, fixed 1/60 s loop.
-- Controls: A = draw blade + strike / pick up / use, S (`PR.sheathe`) = sheathe, ↑ in fight = block. Foes take 3–5 hits, the Lord 10. No blood: hits and finishers use sparks, debris and embers only.
-- Game coordinates 320×200 (`TW=32`, `RH=60`), HUD at y 180–200. The canvas is supersampled: `draw()` sets `ctx.setTransform(RS,…)` with `RS` 2–4 from `fit()`; offscreen canvases (`buildBG`, `vignette`) are built at `SW*RS` and rebuilt when `RS` changes. Draw smooth shapes (`seg` strokes, `dot`, `rrect`), not pixel-snapped `Math.round` rects.
+- Scripts load in order `levels.js → game.js → ship.js` (plain scripts, shared global scope, no modules).
+- `levels.js` – `LEVELS` (17 levels: 3 chapters × 5 platform levels + 2 ship levels). A level has `rooms: [{ map, foes, plats, wl, lore }]` (or top-level `map`/`foes` for level 0); each room is 3 rows × 10 tiles. Tiles `_ # L S W H M P G D B O T K E` plus `Q` quicksand, `U` air vent, `N` mine. `wl` = water level in px (125 bottom row flooded, -100 whole room). Ship levels have `ship: { diff, from, to }`. Exits are `D`; walking off the screen edge enters the neighbouring room (`roomCheck`). Keep every exit reachable.
+- `game.js` – input (keyboard, touch joystick `#stick` + `button[data-k]`, fullscreen `toggleFull`), `fit()` scaling, state (`game`, `P`, `FOES`, `BOLTS`, room globals swapped by `enterRoom`), updates (`updPlayer`, `updTrooper`, `updLord`, drones, `auraPull`/`auraPush` + QTE `game.qte`/`updQte`, swimming `startSwim`/`updO2`, `updPlats`, `updMines`, finishers), drawing (`buildBG` cached in `BGS[lvl:room]` with `THEMES` 0–8, `drawFig` + `STY`, `gait` IK walk/run, `drawWater`, `drawAuraFx`, `lighting`, `drawEmissive`, `drawWin`), WebAudio, fixed 1/60 s loop.
+- `ship.js` – ship shooter (`startShip`, `updShip`, `drawShip`, `shipHint`, `SHIP`); `update`/`draw` delegate to it when `LV.ship`.
+- Controls: A = draw blade + strike / pick up / use, S = sheathe, Z = aura pull (then A for the QTE finisher; Lord loses 2 HP and may resist), X = aura push, ↑ in fight = block, F = fullscreen. Foes take 3–5 hits, Lords 10. No blood.
+- Game coordinates 320×200 (`TW=32`, `RH=60`), HUD at y 180–200. The canvas is supersampled (`RS` 2–4); draw smooth shapes, not pixel-snapped rects.
 - All text goes through `txt()` (drawn on the full-resolution overlay canvas `#txt`); never `fillText` on the pixel canvas.
 
 ## Conventions
 
-- No external assets or dependencies; all art is drawn in code. Do not copy original Prince of Persia assets or use trademarked franchise names (no "Jedi", "Sith", "lightsaber").
-- After changing `game.js`, bump `?v=N` in `index.html`.
+- No external assets or dependencies; all art is drawn in code. Do not copy original Prince of Persia assets or use trademarked franchise names (no "Jedi", "Sith", "lightsaber", "Force" – the power is called "aura").
+- After changing any script, bump `?v=N` on all `<script>` tags in `index.html` (same number).
 - Comments, UI text and docs in Polish. Files UTF-8 without BOM, LF.
 - Keep `README.md` (controls, levels, rules) in sync with code.
