@@ -16,39 +16,45 @@ const STEP = 1 / 60;
 
 // Legenda map: _ podłoga, spacja – brak podłogi (w dolnym rzędzie przepaść), # mur,
 // L luźna płyta, S kolce, W rękojeść ostrza, H mała mikstura, M duża mikstura (+1 życie),
-// P płyta naciskowa (otwiera kraty), G krata, D drzwi wyjściowe.
-// Przeciwnicy: blaster – pojedyncze strzały (1 trafienie), rifle – karabin, seria 2 strzałów
-// (2 trafienia), lord – boss na końcu rozdziału z czerwonym ostrzem.
+// P płyta naciskowa (otwiera kraty), G krata, D drzwi wyjściowe,
+// B skrzynia (cięcie ją rozbija – w środku kryształ lub mikstura), O kryształ (zbierany w biegu),
+// T terminal z zapiskami (A – odczytaj), K konsola (A – wyłącza bariery i blokuje kraty w górze),
+// E bariera energetyczna (pulsuje: włączona parzy i blokuje przejście oraz strzały).
+// Przeciwnicy: blaster – pojedyncze strzały (3 trafienia), rifle – karabin, seria 2 strzałów
+// (4 trafienia; od poziomu 4 obaj +1), lord – boss na końcu rozdziału z czerwonym ostrzem (10 trafień).
 const LEVELS = [
   { name: 'Dach Cytadeli', theme: 0, sky: true,
-    map: ['___L   __W',
-          '##_______ ',
-          '#D__G_H__P'],
+    map: ['O__L   __W',
+          '##__B____ ',
+          '#DT_G_H__P'],
     start: { r: 0, c: 1, dir: 1 },
+    lore: 'Dziennik strażnika: „Rękojeść ze skarbca leży na dachu. Lord zabronił jej dotykać.”',
     foes: [{ k: 'blaster', r: 1, c: 8, dir: -1, sleep: true }] },
   { name: 'Blok więzienny', theme: 1,
-    map: ['#_____ __#',
-          ' __S______',
-          '__P__ __GD'],
+    map: ['#___O_ __#',
+          ' __SK_E___',
+          'B_P__ __GD'],
     start: { r: 0, c: 1, dir: 1 },
     foes: [{ k: 'blaster', r: 0, c: 8, dir: -1 }, { k: 'rifle', r: 1, c: 1, dir: 1 }] },
   { name: 'Kuźnia reaktora', theme: 2,
-    map: ['_H_ ___PGD',
-          '__ _S___ M',
-          '#_____ __#'],
+    map: ['TH_ ___PGD',
+          'O_ _S___ M',
+          '#__B__ __#'],
     start: { r: 2, c: 1, dir: 1 },
+    lore: 'Rejestr kuźni: „Reaktor zasila ostrze Lorda. Zapasowe kryształy trzymamy w skrzyniach.”',
     foes: [{ k: 'rifle', r: 2, c: 8, dir: -1 }, { k: 'blaster', r: 0, c: 6, dir: -1 }] },
   { name: 'Zalane tunele', theme: 3,
-    map: ['#__L__L_ _',
-          ' __G___P__',
-          '_H_S_____D'],
+    map: ['#__LO_L_ _',
+          ' __G_B_P_K',
+          '_H_S__E__D'],
     start: { r: 0, c: 1, dir: 1 },
     foes: [{ k: 'blaster', r: 1, c: 1, dir: 1 }, { k: 'rifle', r: 2, c: 5, dir: -1 }, { k: 'blaster', r: 2, c: 7, dir: -1 }] },
   { name: 'Sala Mrocznego Lorda', theme: 4, lock: true,
-    map: ['#__S___ ##',
-          '#__ ____H#',
+    map: ['#_OS___ ##',
+          '#T_ __B_H#',
           '#________D'],
     start: { r: 0, c: 1, dir: 1 },
+    lore: 'Ostatni wpis: „Gdy Lord uderza w twoją zasłonę, na chwilę traci równowagę. Wtedy tnij.”',
     foes: [{ k: 'rifle', r: 1, c: 5, dir: -1 }, { k: 'lord', r: 2, c: 7, dir: -1 }] },
 ];
 
@@ -68,7 +74,7 @@ const colOf = x => Math.floor(x / TW);
 const lerp = (a, b, k) => a + (b - a) * k;
 const ease = k => 1 - (1 - k) * (1 - k);
 const HANGST = ['hang', 'climb', 'climbdown', 'reach'];
-const FIGHTST = ['fight', 'fstep', 'strike', 'block'];
+const FIGHTST = ['fight', 'fstep', 'strike', 'block', 'fin'];
 
 // ===== Płótno i skalowanie =====
 const cv = document.getElementById('game');
@@ -128,6 +134,9 @@ const SND = {
   crash: () => { tone(160, 0.35, 'sawtooth', 0.07, 40); tone(90, 0.3, 'triangle', 0.1, 30); },
   rattle: () => { for (let i = 0; i < 3; i++) tone(200 + i * 40, 0.04, 'square', 0.03, 0, i * 0.05); },
   click: () => tone(320, 0.06, 'square', 0.05, 160),
+  gem: () => melody([988, 1319, 1760], 0.06, 'triangle', 0.05),
+  zap: () => { tone(60, 0.25, 'sawtooth', 0.08, 120); tone(1200, 0.12, 'square', 0.03, 300); },
+  slash: () => { tone(90, 0.5, 'sawtooth', 0.06, 40); tone(2600, 0.25, 'triangle', 0.03, 500); },
   tick: () => tone(150, 0.03, 'square', 0.025),
   alarm: () => melody([880, 660, 880, 660], 0.11, 'square', 0.03),
   die: () => melody([392, 330, 262, 196, 0, 131], 0.2, 'square', 0.05),
@@ -138,10 +147,12 @@ const SND = {
 };
 
 // ===== Wejście =====
-// Strzałki – ruch, A – cios / podnieś, Shift – ostrożny krok, R – powtórz poziom.
+// Strzałki – ruch, A – wyciągnij ostrze / cios / podnieś / użyj, S – schowaj ostrze,
+// Shift – ostrożny krok, R – powtórz poziom.
 const K = {}, PR = {};
 const KEYMAP = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Shift: 'walk' };
-const keyOf = e => (e.code === 'KeyA' || e.key === 'a' || e.key === 'A') ? 'act' : KEYMAP[e.key];
+const keyOf = e => (e.code === 'KeyA' || e.key === 'a' || e.key === 'A') ? 'act'
+  : (e.code === 'KeyS' || e.key === 's' || e.key === 'S') ? 'sheathe' : KEYMAP[e.key];
 function press(k) { if (!K[k]) PR[k] = true; K[k] = true; }
 function release(k) { K[k] = false; }
 
@@ -176,18 +187,19 @@ document.querySelectorAll('#touch button').forEach(b => {
 });
 
 // ===== Stan gry =====
-let lvl = 0, LV, MAP, P, FOES, LOOSE, BOLTS, gate, gateT, gateTick, spikes, parts, msg, flash, lamps;
-const game = { mode: 'title', time: 0, anim: 0, blade: BLADES[0], maxHp: 3, lvlMax: 3, shake: 0, stop: 0, trans: 0, hud: null };
+let lvl = 0, LV, MAP, P, FOES, LOOSE, BOLTS, gate, gateT, gateTick, spikes, parts, msg, flash, lamps, DEBRIS, used;
+const game = { mode: 'title', time: 0, anim: 0, blade: BLADES[0], maxHp: 3, lvlMax: 3, shake: 0, stop: 0, trans: 0, hud: null,
+  crys: 0, crysLvl: 0, slowT: 0, bars: 0, finName: '' };
 
 function say(text, sec) { msg = { text, t: sec || 3 }; }
 
 function mkFoe(f) {
-  const hp = f.k === 'lord' ? 6 : f.k === 'rifle' ? 2 : 1;
+  const hp = f.k === 'lord' ? 10 : Math.min(5, (f.k === 'rifle' ? 4 : 3) + (lvl >= 3 ? 1 : 0));
   return {
-    k: f.k, x: f.c * TW + 16, y: floorY(f.r), r: f.r, dir: f.dir,
+    k: f.k, x: f.c * TW + 16, y: floorY(f.r), r: f.r, dir: f.dir, hx: f.c * TW + 16,
     st: f.sleep ? 'sleep' : f.k === 'lord' ? 'meditate' : 'idle', t: 0, hp, max: hp, alive: true,
     cd: 1.1 + Math.random() * 0.7, vx: 0, vy: 0, air: false, hit: false, shots: 0, ft: 0,
-    white: 0, mf: 0, bb: 0, trail: [],
+    white: 0, mf: 0, bb: 0, trail: [], aw: false, lost: 0, wait: Math.random(), mv: 0, sd: 0, sdt: 0, fury: false,
   };
 }
 
@@ -211,20 +223,21 @@ function loadLevel(i) {
     const ch = MAP[r][c];
     if (ch !== '#' && ch !== 'D' && ch !== 'G') lamps.push({ x: c * TW + 16, y: floorY(r) - 36 });
   }
-  BOLTS = []; parts = []; flash = null;
+  BOLTS = []; parts = []; DEBRIS = []; flash = null; used = false;
   gate = 0; gateT = 0; gateTick = 0;
-  game.shake = 0; game.stop = 0; game.hud = null;
+  game.shake = 0; game.stop = 0; game.hud = null; game.slowT = 0; game.bars = 0;
+  game.crysLvl = game.crys;
   game.mode = 'play';
   if (!BGS[i]) BGS[i] = buildBG(LV);
   say(sky ? 'Spadasz z nocnego nieba...' : 'Poziom ' + (i + 1) + ': ' + LV.name, 2.5);
 }
 
-function newGame() { game.maxHp = 3; game.time = 0; loadLevel(0); }
+function newGame() { game.maxHp = 3; game.time = 0; game.crys = 0; loadLevel(0); }
 function restart() {
   if (game.mode === 'title') { start(); return; }
   if (game.mode === 'win') { newGame(); return; }
   if (game.mode === 'trans') return;
-  game.maxHp = game.lvlMax; loadLevel(lvl);
+  game.maxHp = game.lvlMax; game.crys = game.crysLvl; loadLevel(lvl);
 }
 function start() {
   audioOn();
@@ -252,19 +265,22 @@ function hasFloor(r, c) {
 }
 const isWall = (r, c) => cell(r, c) === '#';
 const gateBlocks = (r, c) => cell(r, c) === 'G' && gate < 0.8;
+// Bariera energetyczna pulsuje (2 s włączona, 1,2 s wyłączona); konsola K wyłącza ją na stałe
+const barrierOn = c => !used && ((game.anim + c * 0.37) % 3.2) < 2;
+const barBlocks = (r, c) => cell(r, c) === 'E' && barrierOn(c);
 const doorOpen = () => !LV.lock || !FOES.some(f => f.k === 'lord' && f.alive);
 
-// Czy między dwoma punktami w rzędzie nie ma muru ani zamkniętej kraty (linia strzału)?
+// Czy między dwoma punktami w rzędzie nie ma muru, zamkniętej kraty ani bariery (linia strzału)?
 function los(r, a, b) {
   const lo = Math.min(a, b), hi = Math.max(a, b);
   for (let c = colOf(lo); c <= colOf(hi); c++) {
     if (isWall(r, c)) return false;
-    if (gateBlocks(r, c)) { const gx = c * TW + TW / 2; if (gx > lo && gx < hi) return false; }
+    if (gateBlocks(r, c) || barBlocks(r, c)) { const gx = c * TW + TW / 2; if (gx > lo && gx < hi) return false; }
   }
   return true;
 }
 
-// Ruch poziomy z kolizją ze ścianami i kratą (krata blokuje tylko wejście na linię środka kafla).
+// Ruch poziomy z kolizją ze ścianami, kratą i barierą (blokują tylko wejście na linię środka kafla).
 function moveX(o, dx, r) {
   if (!dx) return true;
   const s = Math.sign(dx);
@@ -275,10 +291,13 @@ function moveX(o, dx, r) {
     return false;
   }
   for (let c = 0; c < COLS; c++) {
-    if (!gateBlocks(r, c)) continue;
+    const bar = barBlocks(r, c);
+    if (!gateBlocks(r, c) && !bar) continue;
     const gx = c * TW + TW / 2;
-    if (s > 0 && o.x + HW <= gx && nx + HW > gx) { o.x = gx - HW; return false; }
-    if (s < 0 && o.x - HW >= gx && nx - HW < gx) { o.x = gx + HW; return false; }
+    let hit = false;
+    if (s > 0 && o.x + HW <= gx && nx + HW > gx) { o.x = gx - HW; hit = true; }
+    if (s < 0 && o.x - HW >= gx && nx - HW < gx) { o.x = gx + HW; hit = true; }
+    if (hit) { if (bar && o === P) zap(-s); return false; }
   }
   o.x = nx;
   return true;
@@ -319,6 +338,30 @@ function sparks(x, y, rgbCol, n) {
 }
 const shake = v => { game.shake = Math.max(game.shake, v); };
 
+// Unoszące się w górę żarzące się drobiny (rozpad Lorda)
+function embers(x, y, n, col) {
+  for (let i = 0; i < n; i++) {
+    parts.push({ x: x + (Math.random() - 0.5) * 12, y: y - Math.random() * 30, vx: (Math.random() - 0.5) * 24,
+      vy: -15 - Math.random() * 35, life: 0.6 + Math.random() * 0.9, col, e: true, g: -20 });
+  }
+}
+// Odłamki (przecięta broń, deski skrzyni, rękojeść Lorda) – obracają się i odbijają od podłogi
+function debris(x, y, r, vx, vy, len, col, hot) {
+  DEBRIS.push({ x, y, r, vx, vy, a: Math.random() * 6, va: (Math.random() - 0.5) * 24, len, col, hot: hot || 0, life: 2.5 });
+}
+function updDebris(dt) {
+  for (const d of DEBRIS) {
+    d.vy = Math.min(d.vy + GRAV * dt, 400); d.x += d.vx * dt; d.y += d.vy * dt; d.a += d.va * dt;
+    d.life -= dt; d.hot = Math.max(0, d.hot - dt);
+    const fy = floorY(d.r);
+    if (d.vy > 0 && d.y >= fy - 1 && d.y - d.vy * dt <= fy && hasFloor(d.r, colOf(d.x))) {
+      d.y = fy - 1; d.vy *= -0.35; d.vx *= 0.55; d.va *= 0.5;
+      if (Math.abs(d.vy) < 25) { d.vy = 0; d.vx *= 0.5; d.va = 0; }
+    } else if (d.y > fy + 4 && d.r < ROWS - 1) d.r++;
+  }
+  DEBRIS = DEBRIS.filter(d => d.life > 0 && d.y < SH + 20);
+}
+
 // ===== Gracz =====
 const playerOnRow = r => !P.air && P.r === r && P.st !== 'dead' && HANGST.indexOf(P.st) < 0;
 const fightable = f => f.alive && !f.air && !['sleep', 'meditate', 'rise'].includes(f.st);
@@ -342,7 +385,7 @@ function die(kind) {
   flash = { col: '#c00000', t: 0.25 };
   const t = { kolce: 'Kolce przebiły cię na wylot.', upadek: 'Upadek z tej wysokości był zabójczy.',
     strzal: 'Strzał z blastera dosięgnął celu.', kolba: 'Żołnierz powalił cię kolbą.',
-    lord: 'Mroczny Lord cię pokonał.', gruz: 'Przygniótł cię gruz.' };
+    lord: 'Mroczny Lord cię pokonał.', gruz: 'Przygniótł cię gruz.', bariera: 'Bariera energetyczna cię poraziła.' };
   say(t[kind] || 'Zginąłeś.', 99);
 }
 
@@ -351,7 +394,7 @@ function hurtPlayer(n, pushDir, kind) {
   P.hp -= n; P.inv = 0.8;                     // krótka nietykalność – seria nie zabija od razu
   flash = { col: '#ff0000', t: 0.12 };
   SND.hit(); shake(2);
-  burst(P.x, P.y - 18, 6, '#c01010', 50);
+  burst(P.x, P.y - 18, 6, '#d8c8a0', 50);
   if (P.hp <= 0) { die(kind); return; }
   if (!P.air && HANGST.indexOf(P.st) < 0 && P.st !== 'sword' && P.st !== 'drink') {
     P.st = 'hurt'; P.t = 0;
@@ -361,6 +404,13 @@ function hurtPlayer(n, pushDir, kind) {
 
 function startFall(vx) {
   P.st = 'fall'; P.t = 0; P.air = true; P.vy = 0; P.vx = vx; P.fallY = floorY(P.r);
+}
+
+// Porażenie barierą energetyczną – odrzut i utrata życia
+function zap(dir) {
+  if (P.inv > 0 || P.st === 'dead') return;
+  SND.zap(); sparks(P.x, P.y - 16, '#ffa040', 10);
+  hurtPlayer(1, dir, 'bariera');
 }
 
 // Po ruchu po podłodze: brak podłogi → spadanie, kolce → śmierć (poza ostrożnym krokiem).
@@ -433,6 +483,43 @@ function tryPick() {
   return false;
 }
 
+// Terminal z zapiskami i konsola sterująca
+function tryUse() {
+  const ch = cell(P.r, colOf(P.x));
+  if (ch !== 'T' && ch !== 'K') return false;
+  P.st = 'use'; P.t = 0; SND.click();
+  if (ch === 'T') say(LV.lore || 'Terminal milczy.', 5);
+  else if (used) say('Konsola jest już przełączona.', 1.5);
+  else {
+    used = true; SND.zap(); shake(1);
+    sparks(colOf(P.x) * TW + 16 + P.dir * 4, P.y - 14, '#60ff80', 8);
+    say('Konsola: bariery wyłączone, kraty zablokowane w górze.', 3);
+  }
+  return true;
+}
+
+// Skrzynia w zasięgu cięcia (ten sam kafel albo przed graczem)
+function crateAhead() {
+  for (let c = 0; c < COLS; c++) {
+    if (cell(P.r, c) !== 'B') continue;
+    const d = (c * TW + 16 - P.x) * P.dir;
+    if (d > -10 && d < 34) return c;
+  }
+  return -1;
+}
+function breakCrate(c) {
+  const r = P.r, x = c * TW + 16, fy = floorY(r), pot = P.hp < P.max;
+  MAP[r][c] = pot ? 'H' : 'O';
+  SND.crash(); shake(2); game.stop = 0.04;
+  sparks(x, fy - 8, game.blade.col, 8);
+  burst(x, fy - 6, 10, '#8a6a40', 90, 80);
+  for (let i = 0; i < 5; i++) {
+    debris(x + (Math.random() - 0.5) * 12, fy - 4 - Math.random() * 10, r, (Math.random() - 0.5) * 140 + P.dir * 40,
+      -80 - Math.random() * 90, 3 + Math.random() * 4, i % 2 ? '#7a5430' : '#a07444', i < 2 ? 0.4 : 0);
+  }
+  say(pot ? 'Skrzynia pęka – w środku mikstura!' : 'Skrzynia pęka – w środku kryształ!', 2);
+}
+
 const atDoor = () => cell(P.r, colOf(P.x)) === 'D';
 
 // Czy przed graczem stoi żywy przeciwnik (nie da się go przejść)?
@@ -459,6 +546,27 @@ function startStrike(chain) {
   }
 }
 
+// A bez przeciwnika: ostrze zapala się i od razu tnie (cięcie też odbija strzały)
+function drawStrike() {
+  if (P.ign < 0.2) SND.ignite();
+  P.drawn = true; P.ign = Math.max(P.ign, 0.4);
+  startStrike(false);
+}
+
+// Finiszer – efektowne ostatnie cięcie w zwolnionym tempie (bez krwi: iskry, odłamki, upadek)
+const FIN = [
+  { name: 'WIROWE CIĘCIE', dur: 0.8 },
+  { name: 'CIOS Z WYSKOKU', dur: 0.85 },
+  { name: 'PCHNIĘCIE', dur: 0.75 },
+];
+function startFinisher(f) {
+  const lord = f.k === 'lord';
+  P.st = 'fin'; P.t = 0; P.fv = Math.floor(Math.random() * FIN.length); P.fx = false;
+  P.inv = Math.max(P.inv, 1.5); P.dir = Math.sign(f.x - P.x) || P.dir; P.ft = f;
+  game.slowT = lord ? 1.6 : 0.9; game.finName = lord ? 'OSTATNIE CIĘCIE' : FIN[P.fv].name;
+  game.stop = 0.1; flash = { col: '#ffffff', t: 0.12 }; shake(3); SND.slash();
+}
+
 function updPlayer(dt) {
   const p = P;
   p.t += dt;
@@ -471,6 +579,13 @@ function updPlayer(dt) {
   if (p.air || p.st === 'dead') p.drawn = false;
   const lit = p.sword && (FIGHTST.includes(p.st) || (p.st === 'hurt' && (p.drawn || engaged())));
   p.ign = Math.max(0, Math.min(1, p.ign + (lit ? 7 : -4) * dt));
+  // Kryształ zbierany w biegu
+  if (!p.air && p.st !== 'dead' && HANGST.indexOf(p.st) < 0 && cell(p.r, colOf(p.x)) === 'O' &&
+      Math.abs(colOf(p.x) * TW + 16 - p.x) < 12) {
+    MAP[p.r][colOf(p.x)] = '_'; game.crys++; SND.gem();
+    sparks(colOf(p.x) * TW + 16, p.y - 10, '#80f0ff', 10);
+    say('Kryształ energii (' + game.crys + ')', 1.2);
+  }
 
   switch (p.st) {
     case 'stand': {
@@ -489,25 +604,28 @@ function updPlayer(dt) {
         if (PR.down && tryHangDown()) break;
         p.st = 'crouch'; p.t = 0; break;
       }
-      if (PR.act && tryPick()) break;
-      if (PR.act && p.sword) { p.drawn = true; toFight(); break; }   // wcześniejsze wyciągnięcie ostrza
+      if (PR.act && (tryPick() || tryUse())) break;
+      if (PR.act && p.sword) { drawStrike(); break; }   // A – wyciągnięcie ostrza i od razu cios
       if (back) { p.dir = -p.dir; p.st = 'turn'; p.t = 0; break; }
-      if (fwd && !foeAhead(p.dir)) { p.st = (K.walk || K.act) ? 'step' : 'run'; p.t = 0; }
+      if (fwd && !foeAhead(p.dir)) { p.st = K.walk ? 'step' : 'run'; p.t = 0; }
       break;
     }
     case 'turn': if (p.t > 0.12) p.st = 'stand'; break;
+    case 'use': if (p.t > 0.45) p.st = 'stand'; break;
     case 'run': {
       const t = p.sword && engaged();
       if (t && Math.abs(t.x - p.x) < 60) { toFight(); break; }
+      if (PR.act && p.sword) { drawStrike(); break; }
       if (PR.up) { jump(130); break; }
       if (back) { p.dir = -p.dir; p.st = 'turn'; p.t = 0; break; }
-      if (!fwd || K.walk || K.act || foeAhead(p.dir)) { p.st = 'stand'; break; }
+      if (!fwd || K.walk || foeAhead(p.dir)) { p.st = 'stand'; break; }
       if (PR.down) { p.st = 'crouch'; p.t = 0; break; }
       moveX(p, p.dir * 64 * dt, p.r);
       groundCheck(true);
       break;
     }
     case 'step': {
+      if (PR.act && p.sword) { drawStrike(); break; }
       if (p.t < 0.45) {
         const nx = p.x + p.dir * 22 * dt;
         const aNow = colOf(p.x + p.dir * 4), aNext = colOf(nx + p.dir * 4);
@@ -517,7 +635,7 @@ function updPlayer(dt) {
         groundCheck(false);
       } else {
         p.st = 'stand';
-        if (fwd && (K.walk || K.act)) { p.st = 'step'; p.t = 0; }
+        if (fwd && K.walk) { p.st = 'step'; p.t = 0; }
       }
       break;
     }
@@ -557,7 +675,7 @@ function updPlayer(dt) {
       }
       if (p.t >= 2.4) {
         p.sword = true; p.st = 'stand'; p.t = 0;
-        say('Kryształ rozbłysnął ' + game.blade.name + ' światłem! A – wyciągnij ostrze / cios.', 3.5);
+        say('Kryształ rozbłysnął ' + game.blade.name + ' światłem! A – ostrze / cios, S – schowaj.', 3.5);
       }
       break;
     }
@@ -574,9 +692,15 @@ function updPlayer(dt) {
     }
     case 'fight': {
       const t = engaged();
-      if (PR.down) { p.drawn = false; p.st = 'stand'; p.t = 0; SND.swing(); break; }   // schowanie ostrza
+      if (PR.sheathe) { p.drawn = false; p.st = 'stand'; p.t = 0; SND.swing(); break; }   // S – schowanie ostrza
       if (!t && !p.drawn) { p.st = 'stand'; break; }
       if (t) p.dir = Math.sign(t.x - p.x) || p.dir;
+      if (!t && PR.act && (tryPick() || tryUse())) break;
+      if (!t && PR.up && atDoor()) {
+        if (doorOpen()) { p.drawn = false; p.st = 'exit'; p.t = 0; SND.win(); }
+        else say('Drzwi blokuje pole siłowe Lorda.', 2);
+        break;
+      }
       if (PR.act) { startStrike(false); break; }
       if (PR.up) { p.st = 'block'; p.t = 0; break; }
       const f = p.dir > 0 ? K.right : K.left, b = p.dir > 0 ? K.left : K.right;
@@ -602,6 +726,26 @@ function updPlayer(dt) {
       if (p.t > 0.34) p.st = afterFight();
       break;
     case 'block': if (p.t > 0.4) p.st = afterFight(); break;
+    case 'fin': {
+      const f = p.ft, t = p.t, v = p.fv;
+      // Przesunięcie bohatera w trakcie finiszera (skok / wypad)
+      const mv = v === 1 ? (t < 0.4 ? 30 : 0) : v === 2 ? (t > 0.12 && t < 0.24 ? 90 : 0) : 0;
+      if (mv && Math.abs(f.x - p.x) > 8) { moveX(p, p.dir * mv * dt, p.r); if (!groundCheck(false)) break; }
+      const hitAt = v === 0 ? 0.3 : v === 1 ? 0.45 : 0.2;
+      if (!p.fx && t >= hitAt) {
+        p.fx = true; shake(4); SND.clash();
+        const lord = f.k === 'lord';
+        sparks(f.x, f.y - 20, game.blade.col, 20);
+        if (lord) sparks(f.x, f.y - 24, RED.col, 16);
+        if (v === 1) burst(p.x + p.dir * 10, p.y, 12, '#a89878', 90, 30);
+        if (v === 0) for (let i = 0; i < 12; i++) {
+          const a = i / 12 * Math.PI * 2;
+          burst(p.x + Math.cos(a) * 22, p.y - 20 + Math.sin(a) * 22, 1, game.blade.col, 40, 30, true);
+        }
+      }
+      if (t >= FIN[v].dur) p.st = afterFight();
+      break;
+    }
     case 'hurt': if (p.t > 0.3) p.st = p.sword ? afterFight() : 'stand'; break;
     case 'jump':
     case 'fall': {
@@ -628,7 +772,7 @@ function resolveStrike() {
     const d = Math.abs(f.x - P.x);
     if (d < bd) { bd = d; t = f; }
   }
-  if (!t) return;
+  if (!t) { const c = crateAhead(); if (c >= 0) breakCrate(c); return; }
   if (t.st === 'gblock') {
     SND.clash(); shake(2); game.stop = 0.05;
     const x = (P.x + t.x) / 2;
@@ -636,13 +780,14 @@ function resolveStrike() {
     t.cd = Math.min(t.cd, 0.15);
     return;
   }
-  hitFoe(t, 1, P.dir);
+  if (hitFoe(t, 1, P.dir) && t.st === 'fin') startFinisher(t);
 }
 
+// Zwraca true, gdy cios był śmiertelny
 function hitFoe(f, n, dir) {
-  f.hp -= n; f.white = 0.12; game.hud = f; game.hudT = 3;
+  f.hp -= n; f.white = 0.12; game.hud = f; game.hudT = 3; f.aw = true;
   SND.hit(); shake(2); game.stop = 0.06;
-  burst(f.x, f.y - 20, 8, f.k === 'lord' ? '#601020' : '#30343c', 70);
+  burst(f.x, f.y - 20, 8, f.k === 'lord' ? '#3a2a36' : '#30343c', 70);
   sparks(f.x - dir * 4, f.y - 22, game.blade.col, 8);
   if (f.hp <= 0) {
     f.alive = false; f.st = 'fdead'; f.t = 0;
@@ -652,11 +797,22 @@ function hitFoe(f, n, dir) {
       sparks(f.x, f.y - 30, RED.col, 30);
     } else say(f.k === 'rifle' ? 'Szturmowiec z karabinem pokonany.' : 'Strażnik z blasterem pokonany.', 2);
     foePush(f, dir * 6);
-  } else {
-    f.st = f.k === 'lord' ? 'ghurt' : 'thurt'; f.t = 0;
-    if (f.k === 'lord') f.bb = Math.min(0.4, f.bb + 0.2);
-    foePush(f, dir * 10);
+    if (f.st === 'fdead') {
+      // Upadek zamiast natychmiastowej śmierci; broń szturmowca rozcięta na pół
+      f.st = 'fin'; f.t = 0; f.fd = dir; f.hd = false;
+      if (f.k !== 'lord') {
+        const L = f.k === 'rifle' ? 6 : 4;
+        debris(f.x + f.dir * 8, f.y - 21, f.r, dir * 50 + 20, -150, L, '#1e2026', 0.8);
+        debris(f.x + f.dir * 12, f.y - 21, f.r, dir * 90 - 10, -110, L, '#2a2e36', 0.8);
+        sparks(f.x + f.dir * 10, f.y - 21, '#ffb060', 8);
+      }
+    }
+    return true;
   }
+  f.st = f.k === 'lord' ? 'ghurt' : 'thurt'; f.t = 0;
+  if (f.k === 'lord') f.bb = Math.min(0.4, f.bb + 0.2);
+  foePush(f, dir * 10);
+  return false;
 }
 
 // ===== Przeciwnicy =====
@@ -673,9 +829,18 @@ function foePush(f, dx) {
 
 function foeMove(f, dx) {
   const s = Math.sign(dx), c = colOf(f.x + dx + s * 8);
-  if (isWall(f.r, c) || !hasFloor(f.r, c) || cell(f.r, c) === 'S' || gateBlocks(f.r, c)) return;
-  if (s === Math.sign(P.x - f.x) && playerOnRow(f.r) && Math.abs(P.x - f.x) < 16) return;
-  moveX(f, dx, f.r);
+  if (isWall(f.r, c) || !hasFloor(f.r, c) || cell(f.r, c) === 'S' || cell(f.r, c) === 'E' || gateBlocks(f.r, c)) return false;
+  if (s === Math.sign(P.x - f.x) && playerOnRow(f.r) && Math.abs(P.x - f.x) < 16) return false;
+  if (FOES.some(o => o !== f && o.alive && !o.air && o.r === f.r && Math.sign(o.x - f.x) === s && Math.abs(o.x - f.x) < 18)) return false;
+  f.mv = 0.12;
+  return moveX(f, dx, f.r);
+}
+
+// Patrol: spacer w tę i z powrotem wokół posterunku, z krótkimi postojami
+function patrol(f, dt) {
+  if (f.wait > 0) { f.wait -= dt; return; }
+  const far = Math.abs(f.x - f.hx) > 70 && Math.sign(f.x - f.hx) === f.dir;
+  if (far || !foeMove(f, f.dir * 18 * dt)) { f.dir = -f.dir; f.wait = 0.7 + Math.random() * 1.1; }
 }
 
 function shoot(f) {
@@ -687,9 +852,23 @@ function shoot(f) {
 function updFoe(f, dt) {
   f.t += dt;
   f.white = Math.max(0, f.white - dt); f.mf = Math.max(0, f.mf - dt); f.bb = Math.max(0, f.bb - dt * 0.05);
+  f.mv = Math.max(0, f.mv - dt);
   if (f.st === 'ffall') {
     const r = air(f, dt);
     if (r >= 0) { f.st = 'fdead'; f.t = 0; SND.thud(); }
+    return;
+  }
+  if (f.st === 'fin') {
+    if (f.k === 'lord') {
+      // Czerwone ostrze gaśnie, rękojeść upada, Lord klęka i rozpada się w żar
+      if (!f.hd && f.t > 0.5) {
+        f.hd = true; SND.thud();
+        debris(f.x + f.dir * 8, f.y - 18, f.r, f.dir * 30, -60, 5, '#9aa4b4', 0.6);
+      }
+      if (f.t > 0.8) embers(f.x, f.y - 4, f.t > 1.2 ? 3 : 1, Math.random() < 0.5 ? '#ff5030' : '#ffb060');
+      if (f.t > 2.7) { f.st = 'gone'; f.t = 0; }
+    } else if (f.t > 0.7 && !f.hd) { f.hd = true; SND.thud(); burst(f.x + f.dir * 10, f.y, 8, '#a89878', 50, 20); }
+    else if (f.t > 1.25) { f.st = 'fdead'; f.t = 0; }
     return;
   }
   if (!f.alive) return;
@@ -699,21 +878,33 @@ function updFoe(f, dt) {
 function updTrooper(f, dt) {
   const dx = P.x - f.x, d = Math.abs(dx);
   const same = playerOnRow(f.r);
-  const see = same && d < 200 && los(f.r, f.x, P.x);
+  // Nieświadomy strażnik widzi tylko przed sobą (albo słyszy z bliska)
+  const see = same && d < 200 && los(f.r, f.x, P.x) && (f.aw || Math.sign(dx) === f.dir || d < 50);
+  if (see) { if (!f.aw) { f.aw = true; f.cd = Math.max(f.cd, 0.5); } f.lost = 0; }
+  else if (f.aw && (f.lost += dt) > 4) f.aw = false;
   switch (f.st) {
     case 'sleep':
       if (P.sword || (same && d < 60)) {
-        f.st = 'idle'; f.t = 0; f.cd = 1; SND.alarm(); say('Strażnik podnosi alarm!', 2);
+        f.st = 'idle'; f.t = 0; f.cd = 1; f.aw = true; SND.alarm(); say('Strażnik podnosi alarm!', 2);
       }
       break;
-    case 'idle':
-      if (!see) break;
+    case 'idle': {
+      if (!see) { patrol(f, dt); break; }
       f.dir = Math.sign(dx) || f.dir;
       if (d < 22) { f.st = 'bash'; f.t = 0; f.hit = false; break; }
-      if (d < 44 && P.sword) foeMove(f, -f.dir * 20 * dt);   // cofa się przed ostrzem
+      // Taktyka: trzyma dystans strzału, cofa się przed ostrzem i przestępuje z nogi na nogę
+      const pref = f.k === 'rifle' ? 110 : 85;
+      if (d < 44 && P.sword) foeMove(f, -f.dir * 26 * dt);
+      else if (d > pref + 25) foeMove(f, f.dir * 28 * dt);
+      else {
+        f.sdt -= dt;
+        if (f.sdt <= 0) { f.sdt = 0.5 + Math.random() * 0.9; f.sd = [-1, 0, 0, 1][Math.floor(Math.random() * 4)]; }
+        if (f.sd) foeMove(f, f.sd * 16 * dt);
+      }
       f.cd -= dt;
       if (f.cd <= 0) { f.st = 'aim'; f.t = 0; }
       break;
+    }
     case 'aim':
       if (!see) { f.st = 'idle'; break; }
       f.dir = Math.sign(dx) || f.dir;
@@ -740,7 +931,17 @@ function updTrooper(f, dt) {
       }
       if (f.t > 0.55) { f.st = 'idle'; f.cd = 0.5; }
       break;
-    case 'thurt': if (f.t > 0.35) { f.st = 'idle'; f.cd = Math.max(f.cd, 0.4); } break;
+    case 'thurt':
+      if (f.t > 0.32) {
+        // Po trafieniu czasem odskakuje do tyłu i od razu składa się do strzału
+        if (d < 50 && Math.random() < 0.4) { f.st = 'dodge'; f.t = 0; SND.swing(); }
+        else { f.st = 'idle'; f.cd = Math.max(f.cd, 0.4); }
+      }
+      break;
+    case 'dodge':
+      foeMove(f, -f.dir * 95 * dt);
+      if (f.t > 0.34) { f.st = 'aim'; f.t = 0.1; }
+      break;
     case 'tstun': if (f.t > 0.7) { f.st = 'idle'; f.cd = 0.3; } break;
   }
 }
@@ -748,6 +949,11 @@ function updTrooper(f, dt) {
 function updLord(f, dt) {
   const dx = P.x - f.x, d = Math.abs(dx);
   const same = playerOnRow(f.r);
+  if (!f.fury && f.hp <= 5 && f.st !== 'meditate' && f.st !== 'rise') {
+    f.fury = true; say('Mroczny Lord wpada w furię!', 2.5); SND.lord(); shake(3);
+    sparks(f.x, f.y - 26, RED.col, 20);
+  }
+  const sp = f.fury ? 1.3 : 1;
   switch (f.st) {
     case 'meditate':
       if (same) {
@@ -759,21 +965,29 @@ function updLord(f, dt) {
     case 'guard': {
       if (!same || d > 150) break;
       f.dir = Math.sign(dx) || f.dir;
-      if (d > 34) foeMove(f, f.dir * 34 * dt);
+      if (d > 34) foeMove(f, f.dir * 34 * sp * dt);
       else if (d < 20) foeMove(f, -f.dir * 24 * dt);
-      f.cd -= dt;
+      f.cd -= dt * sp;
       if (f.cd <= 0) {
-        if (d < 46) { f.st = 'wind'; f.t = 0; }
+        if (d < 30 && Math.random() < 0.3) { f.st = 'hop'; f.t = 0; SND.swing(); }   // odskok i wypad
+        else if (d < 46) { f.st = 'wind'; f.t = 0; }
         else if (d < 110 && Math.random() < 0.5) { f.st = 'lunge'; f.t = 0; SND.swing(); }
         else f.cd = 0.3;
       }
       break;
     }
+    case 'hop':
+      foeMove(f, -f.dir * 120 * dt);
+      if (f.t > 0.3) {
+        if (Math.random() < 0.6) { f.st = 'lunge'; f.t = 0; SND.swing(); }
+        else { f.st = 'guard'; f.t = 0; f.cd = 0.3; }
+      }
+      break;
     case 'lunge':
-      foeMove(f, f.dir * 150 * dt);
+      foeMove(f, f.dir * 150 * sp * dt);
       if (f.t > 0.24 || d < 26) { f.st = 'gstrike'; f.t = 0; f.hit = false; SND.swing(); }
       break;
-    case 'wind': if (f.t > 0.32) { f.st = 'gstrike'; f.t = 0; f.hit = false; SND.swing(); } break;
+    case 'wind': if (f.t > (f.fury ? 0.24 : 0.32)) { f.st = 'gstrike'; f.t = 0; f.hit = false; SND.swing(); } break;
     case 'gstrike':
       if (!f.hit && f.t > 0.07) {
         f.hit = true;
@@ -809,7 +1023,7 @@ function updBolts(dt) {
     const lo = Math.min(px, b.x), hi = Math.max(px, b.x);
     const c = colOf(b.x);
     if (b.x < -10 || b.x > SW + 10) { b.dead = true; continue; }
-    if (isWall(b.r, c) || (gateBlocks(b.r, c) && lo <= c * TW + 16 && hi >= c * TW + 16)) {
+    if (isWall(b.r, c) || ((gateBlocks(b.r, c) || barBlocks(b.r, c)) && lo <= c * TW + 16 && hi >= c * TW + 16)) {
       b.dead = true; burst(b.x, b.y, 5, '#ff6040', 60, 40, true); continue;
     }
     if (b.o === 'e') {
@@ -831,8 +1045,8 @@ function updBolts(dt) {
 function boltHitsPlayer(b) {
   const facing = Math.sign(b.vx) === -P.dir;
   const armed = P.sword && facing;
-  if (armed && (P.st === 'block' || (P.st === 'strike' && P.t > 0.05 && P.t < 0.22))) {
-    // Zasłona w odpowiednim momencie odbija strzał prosto w strzelca
+  if (armed && (P.st === 'block' || P.st === 'strike' || P.st === 'fin')) {
+    // Cios lub zasłona odbija strzał prosto w strzelca
     b.vx = -b.vx * 1.15; b.o = 'p';
     SND.deflect(); shake(1);
     sparks(b.x, b.y, game.blade.col, 8);
@@ -881,6 +1095,7 @@ function plateDown() {
 }
 
 function updGate(dt) {
+  if (used) { gate = Math.min(1, gate + dt * 1.5); gateT = 1; return; }   // konsola otworzyła kratę na stałe
   const on = plateDown();
   if (on) {
     if (gateT <= 0) { SND.click(); if (gate < 0.8) say('Gdzieś zgrzytnęła krata...', 2); }
@@ -909,13 +1124,27 @@ function updSpikes(dt) {
 }
 
 function updParts(dt) {
-  for (const q of parts) { q.vy += 300 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; }
+  for (const q of parts) { q.vy += (q.g ?? 300) * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; }
   parts = parts.filter(q => q.life > 0);
+}
+
+// Bariera włączająca się na kimś – odpycha go (gracza dodatkowo razi)
+function updBarriers() {
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    if (!barBlocks(r, c)) continue;
+    const cx = c * TW + 16;
+    if (!P.air && P.r === r && P.st !== 'dead' && Math.abs(P.x - cx) < HW) {
+      const s = P.x < cx ? -1 : 1;
+      P.x = cx + s * (HW + 1); zap(s);
+    }
+    for (const f of FOES) if (f.alive && f.r === r && Math.abs(f.x - cx) < 10) f.x = cx + (f.x < cx ? -11 : 11);
+  }
 }
 
 function update(dt) {
   game.anim += dt;
   game.shake = Math.max(0, game.shake - dt * 10);
+  game.bars += ((game.slowT > 0 ? 1 : 0) - game.bars) * Math.min(1, dt * 8);
   if (game.mode === 'trans') {
     game.trans += dt;
     if (game.trans > 2.4) loadLevel(lvl + 1);
@@ -923,6 +1152,7 @@ function update(dt) {
   }
   if (game.mode !== 'play') return;
   if (game.stop > 0) { game.stop -= dt; return; }       // „zatrzymanie klatki” przy trafieniu
+  if (game.slowT > 0) { game.slowT -= dt; dt *= 0.35; }  // zwolnione tempo finiszera
   if (P.st !== 'dead' && P.st !== 'exit') game.time += dt;
   if (msg.t > 0 && msg.t < 90) msg.t -= dt;
   if (game.hudT > 0) game.hudT -= dt;
@@ -932,7 +1162,9 @@ function update(dt) {
   updGate(dt);
   updSpikes(dt);
   updBolts(dt);
+  updBarriers();
   updParts(dt);
+  updDebris(dt);
   if (flash) { flash.t -= dt; if (flash.t <= 0) flash = null; }
 }
 
@@ -1314,6 +1546,38 @@ function slashPose(t, combo) {
   return { a: lerpPose(B, POSE.fight, Math.min(1, (t - 0.26) / 0.08)), tr: false };
 }
 
+// Finiszery: 0 wirowe cięcie, 1 cios z wyskoku, 2 pchnięcie
+function finPose(p) {
+  const t = p.t, F = POSE.fight;
+  if (p.fv === 0) {
+    const k = Math.min(1, t / 0.55);
+    if (k < 1) {
+      const a = POSE.strike2.slice(), th = -Math.PI / 2 + ease(k) * Math.PI * 2;
+      a[22] = a[16] + Math.cos(th) * 24; a[23] = a[17] + Math.sin(th) * 24;
+      return { a, tr: true, dy: 0 };
+    }
+    return { a: lerpPose(POSE.strike2, F, Math.min(1, (t - 0.55) / 0.2)), tr: false, dy: 0 };
+  }
+  if (p.fv === 1) {
+    const dy = -Math.sin(Math.PI * Math.min(1, t / 0.45)) * 14;
+    if (t < 0.2) return { a: lerpPose(F, POSE.windup, t / 0.2), tr: false, dy };
+    if (t < 0.45) return { a: lerpPose(POSE.windup, POSE.strike2, ease((t - 0.2) / 0.25)), tr: true, dy };
+    if (t < 0.65) return { a: lerpPose(POSE.strike2, POSE.low, (t - 0.45) / 0.2), tr: false, dy };
+    return { a: lerpPose(POSE.low, F, Math.min(1, (t - 0.65) / 0.2)), tr: false, dy };
+  }
+  if (t < 0.12) return { a: lerpPose(F, POSE.windup, t / 0.12), tr: false, dy: 0 };
+  if (t < 0.24) return { a: lerpPose(POSE.windup, POSE.lunge, ease((t - 0.12) / 0.12)), tr: true, dy: 0 };
+  if (t < 0.55) return { a: POSE.lunge, tr: false, dy: 0 };
+  return { a: lerpPose(POSE.lunge, F, Math.min(1, (t - 0.55) / 0.2)), tr: false, dy: 0 };
+}
+
+// Nogi z animacji chodu, reszta z pozy (chód z bronią gotową do strzału / w gardzie)
+function walkPose(base, t) {
+  const r = POSE['run' + (Math.floor(t * 6) % 4)], a = base.slice();
+  for (let i = 4; i < 14; i++) a[i] = r[i];
+  return a;
+}
+
 function drawPlayer() {
   const p = P;
   let a = POSE.stand, x = p.x, y = p.y, blade = p.sword ? 'hip' : '', ign = p.ign, tr = false, sway = 0;
@@ -1346,6 +1610,8 @@ function drawPlayer() {
     case 'fstep': a = POSE.fstep; blade = 'hand'; break;
     case 'strike': { const s = slashPose(p.t, p.combo); a = s.a; tr = s.tr; blade = 'hand'; break; }
     case 'block': a = POSE.block; blade = 'hand'; break;
+    case 'fin': { const s = finPose(p); a = s.a; tr = s.tr; y += s.dy; blade = 'hand'; break; }
+    case 'use': a = POSE.aim; break;
     case 'hurt': a = POSE.hurt; blade = p.sword && p.ign > 0.02 ? 'hand' : blade; break;
     case 'dead': a = POSE.dead; blade = ''; break;
     case 'exit': ctx.globalAlpha = Math.max(0, 1 - p.t / 1.4); break;
@@ -1362,34 +1628,56 @@ function drawPlayer() {
 }
 
 function drawFoe(f) {
+  if (f.st === 'gone') return;
   const S = STY[f.k];
-  let a = POSE.stand, blade = '', ign = 1, tr = false, gun = f.k === 'lord' ? '' : f.k, y = f.y;
+  let a = POSE.stand, blade = '', ign = 1, tr = false, gun = f.k === 'lord' ? '' : f.k, y = f.y, alpha = 1;
   if (f.k === 'lord') {
     blade = 'hand';
     switch (f.st) {
       case 'meditate': a = POSE.kneel; blade = 'hip'; break;
       case 'rise': a = lerpPose(POSE.kneel, POSE.fight, Math.min(1, f.t / 0.8)); ign = Math.min(1, f.t / 0.5); break;
-      case 'guard': a = POSE.fight; break;
+      case 'guard': a = f.mv > 0 ? walkPose(POSE.fight, f.t) : POSE.fight; break;
+      case 'hop': a = POSE.jump; y -= Math.sin(Math.PI * Math.min(1, f.t / 0.3)) * 8; break;
       case 'wind': a = lerpPose(POSE.fight, POSE.windup, Math.min(1, f.t / 0.2)); break;
       case 'lunge': a = POSE.lunge; tr = true; break;
       case 'gstrike': a = f.t < 0.08 ? lerpPose(POSE.windup, POSE.strike, ease(f.t / 0.08)) : POSE.strike; tr = f.t < 0.14; break;
       case 'gblock': a = POSE.block; break;
       case 'ghurt': case 'stun': a = POSE.hurt; break;
+      case 'fin':
+        // Ostrze gaśnie, Lord klęka i rozpływa się w żarze
+        a = f.t < 0.3 ? POSE.hurt : lerpPose(POSE.hurt, POSE.kneel, Math.min(1, (f.t - 0.3) / 0.5));
+        ign = Math.max(0, 1 - f.t / 0.5); if (f.t >= 0.5) blade = '';
+        alpha = f.t < 1 ? 1 : Math.max(0, 1 - (f.t - 1) / 1.5);
+        break;
       case 'ffall': a = POSE.fall; blade = ''; break;
       case 'fdead': a = POSE.dead; blade = ''; break;
     }
   } else {
     switch (f.st) {
       case 'sleep': a = POSE.sleep; break;
-      case 'idle': a = Math.abs(P.x - f.x) < 200 && playerOnRow(f.r) ? POSE.aim : POSE.stand; break;
-      case 'aim': case 'fire': a = POSE.aim; y += (f.mf > 0 ? 0 : 0); break;
+      case 'idle':
+        a = f.aw ? POSE.aim : POSE.stand;
+        if (f.mv > 0) a = f.aw ? walkPose(POSE.aim, f.t) : POSE['run' + (Math.floor(f.t * 5) % 4)];
+        break;
+      case 'aim': case 'fire': a = POSE.aim; break;
+      case 'dodge': a = POSE.jump; y -= Math.sin(Math.PI * Math.min(1, f.t / 0.34)) * 7; break;
       case 'bash': a = f.t < 0.3 ? POSE.bashw : POSE.bash; break;
       case 'thurt': case 'tstun': a = POSE.hurt; break;
+      case 'fin':
+        // Rozcięta broń wypada z rąk, żołnierz osuwa się na kolana i pada
+        gun = '';
+        a = f.t < 0.3 ? POSE.hurt : f.t < 0.7 ? lerpPose(POSE.hurt, POSE.kneel, (f.t - 0.3) / 0.4)
+          : lerpPose(POSE.kneel, POSE.dead, Math.min(1, (f.t - 0.7) / 0.5));
+        break;
       case 'ffall': a = POSE.fall; gun = ''; break;
       case 'fdead': a = POSE.dead; gun = ''; break;
     }
   }
+  const eq0 = EQ.length;
+  ctx.globalAlpha = alpha;
   drawFig(f.x, y, f.dir, a, S, { blade, ign, bc: RED, trail: tr, own: f, gun, mf: f.mf, white: f.white });
+  ctx.globalAlpha = 1;
+  if (alpha < 1) for (let i = eq0; i < EQ.length; i++) EQ[i].a *= alpha;
   if (f.st === 'sleep') {
     const k = (game.anim * 0.8) % 1;
     txt('z', f.x - 2 + k * 4, f.y - 24 - k * 10, `rgba(220,220,255,${1 - k})`, 'center', 7 + k * 2, true);
@@ -1447,9 +1735,6 @@ function drawDynamic() {
         ctx.fillRect(sx + 1 - Math.floor(w / 2), fy - 1 - j, w, 1);
       }
     }
-    if (P.st === 'dead' && P.kind === 'kolce' && P.r === r) {
-      ctx.fillStyle = '#a01010'; ctx.fillRect(c * TW + 6, fy - 4, 20, 2);
-    }
   }
   // Płyta naciskowa, krata, przedmioty, blokada drzwi
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
@@ -1492,6 +1777,57 @@ function drawDynamic() {
         ctx.fillStyle = `rgba(255,40,60,${k})`; ctx.fillRect(x + 6, yy, 20, 1);
       }
       EQ.push({ x: x + 16, y: fy - 16, col: '#ff3040', r: 24, a: 0.3, rgb: '255,40,60' });
+    } else if (ch === 'B') {
+      // Skrzynia z zaopatrzeniem
+      const bx = x + 8, by = fy - 14;
+      ctx.fillStyle = '#3a2614'; ctx.fillRect(bx, by, 16, 14);
+      ctx.fillStyle = '#8a6034'; ctx.fillRect(bx + 1, by + 1, 14, 12);
+      ctx.fillStyle = '#6a4626'; ctx.fillRect(bx + 1, by + 4, 14, 1); ctx.fillRect(bx + 1, by + 9, 14, 1);
+      ctx.fillStyle = '#a87c4a'; ctx.fillRect(bx + 1, by + 1, 14, 1);
+      ctx.fillStyle = '#c8a040'; ctx.fillRect(bx + 3, by + 6, 3, 2); ctx.fillRect(bx + 10, by + 6, 3, 2);
+      ctx.fillStyle = '#2a2a30'; ctx.fillRect(bx + 7, by + 5, 2, 4);
+    } else if (ch === 'O') {
+      // Kryształ energii (unosi się i pulsuje)
+      const cx = x + 16, cy = fy - 8 + Math.sin(game.anim * 3 + c) * 1.5;
+      poly([[cx, cy - 5], [cx + 3, cy], [cx, cy + 5], [cx - 3, cy]], '#40c8ff');
+      poly([[cx, cy - 5], [cx + 3, cy], [cx, cy]], '#c0f4ff');
+      EQ.push({ x: cx, y: cy, col: '#a0f0ff', r: 12 + Math.sin(game.anim * 5) * 2, a: 0.45, rgb: '80,200,255' });
+    } else if (ch === 'T') {
+      // Terminal z zapiskami
+      const tx = x + 11;
+      ctx.fillStyle = '#20242c'; ctx.fillRect(tx + 4, fy - 10, 3, 10);
+      ctx.fillStyle = '#2e333e'; ctx.fillRect(tx, fy - 20, 11, 11);
+      const k = 0.6 + 0.3 * Math.sin(game.anim * 7) + (Math.random() < 0.05 ? -0.4 : 0);
+      ctx.fillStyle = `rgba(90,170,255,${k})`; ctx.fillRect(tx + 1, fy - 19, 9, 8);
+      ctx.fillStyle = 'rgba(220,240,255,0.7)';
+      for (let i = 0; i < 3; i++) ctx.fillRect(tx + 2, fy - 18 + i * 2.5, 3 + ((i * 5 + Math.floor(game.anim * 2)) % 5), 0.8);
+      EQ.push({ x: tx + 5, y: fy - 15, col: '#80c0ff', r: 14, a: 0.3, rgb: '90,170,255' });
+    } else if (ch === 'K') {
+      // Konsola sterująca barierami i kratą
+      const kx = x + 9, on = used;
+      ctx.fillStyle = '#262a34'; ctx.fillRect(kx, fy - 12, 14, 12);
+      ctx.fillStyle = '#3e4452'; ctx.fillRect(kx - 1, fy - 13, 16, 3);
+      ctx.fillStyle = '#5a6070'; ctx.fillRect(kx + 2, fy - 9, 10, 1);
+      ctx.fillStyle = '#9aa0b0'; ctx.fillRect(kx + (on ? 9 : 3), fy - 12, 2, 2);   // przełącznik
+      const lc = on ? '#60ff80' : (Math.floor(game.anim * 3) % 2 ? '#ff4030' : '#802018');
+      ctx.fillStyle = lc; ctx.fillRect(kx + 6, fy - 6, 2, 2);
+      EQ.push({ x: kx + 7, y: fy - 5, col: lc, r: 8, a: 0.4, rgb: on ? '96,255,128' : '255,64,48' });
+    } else if (ch === 'E') {
+      // Bariera energetyczna (pulsuje cyklicznie)
+      const cx = x + 16, top = fy - 30, on = barrierOn(c);
+      ctx.fillStyle = '#3a3e4c'; ctx.fillRect(cx - 3, top - 2, 6, 3); ctx.fillRect(cx - 3, fy - 2, 6, 2);
+      ctx.fillStyle = used ? '#30343c' : on ? '#ffa040' : '#6a4020';
+      ctx.fillRect(cx - 1, top + 1, 2, 1); ctx.fillRect(cx - 1, fy - 3, 2, 1);
+      if (on) {
+        for (let yy = top + 1; yy < fy - 2; yy += 1) {
+          const k = 0.35 + 0.35 * Math.sin(game.anim * 30 + yy * 1.3);
+          ctx.fillStyle = `rgba(255,140,40,${k})`; ctx.fillRect(cx - 1.5 + Math.sin(yy + game.anim * 20) * 0.6, yy, 3, 1);
+        }
+        EQ.push({ x: cx, y: fy - 16, col: '#ffc080', r: 22, a: 0.35, rgb: '255,140,40' });
+      } else if (!used && ((game.anim + c * 0.37) % 3.2) > 2.8) {
+        // Ostrzeżenie: bariera zaraz się włączy
+        ctx.fillStyle = 'rgba(255,140,40,0.5)'; ctx.fillRect(cx - 0.5, top + 1, 1, fy - top - 3);
+      }
     }
   }
   for (const l of lamps) drawLamp(l.x, l.y);
@@ -1570,16 +1906,21 @@ function hint() {
   const p = P, ch = cell(p.r, colOf(p.x));
   if (p.st === 'dead') return 'R lub A – spróbuj ponownie';
   if (p.st === 'hang') return '↑ podciągnij się · ↓ puść krawędź';
-  if (p.st === 'sword' || p.st === 'exit') return '';
-  if (FIGHTST.includes(p.st) || p.st === 'hurt') return 'A cios (2× kombo) · ↑ zasłona · ←→ krok' + (p.drawn ? ' · ↓ schowaj' : '');
+  if (p.st === 'sword' || p.st === 'exit' || p.st === 'fin') return '';
+  const shooter = FOES.some(f => f.alive && f.k !== 'lord' && f.r === p.r && (f.st === 'aim' || f.st === 'fire'));
+  if (FIGHTST.includes(p.st) || p.st === 'hurt') {
+    if (shooter && !engaged()) return 'Strzelec! A – cięcie odbija strzały · S schowaj';
+    return 'A cios (2× kombo) · ↑ zasłona · ←→ krok' + (p.drawn ? ' · S schowaj' : '');
+  }
   if (ch === 'W') return 'A – podnieś rękojeść';
   if (ch === 'H' || ch === 'M') return 'A – wypij miksturę';
+  if (ch === 'T') return 'A – odczytaj terminal';
+  if (ch === 'K') return used ? '' : 'A – użyj konsoli';
   if (atDoor()) return doorOpen() ? '↑ – wyjdź przez wrota' : 'Pokonaj Lorda, by zgasić pole siłowe';
+  if (crateAhead() >= 0) return p.sword ? 'A – rozbij skrzynię' : 'Skrzynię rozetnie tylko ostrze';
   if (!p.sword) return '←→ bieg · Shift+←→ ostrożny krok · ↑ skok · ↓ zwis';
-  if (gate >= 0.8 && gateT <= 0) return 'Krata się zamyka – biegnij!';
-  if (FOES.some(f => f.alive && f.k !== 'lord' && f.r === p.r && (f.st === 'aim' || f.st === 'fire'))) {
-    return 'Strzelec! Podejdź bliżej – ostrze odbija strzały';
-  }
+  if (gate >= 0.8 && gateT <= 0 && !used) return 'Krata się zamyka – biegnij!';
+  if (shooter) return 'Strzelec! A – cięcie odbija strzały';
   return '';
 }
 
@@ -1608,14 +1949,29 @@ function drawHUD() {
   let f = engaged();
   if (!f && game.hud && game.hudT > 0) f = game.hud;
   if (f) {
-    const col = f.k === 'lord' ? '#ff3040' : f.k === 'rifle' ? '#f0a020' : '#80a0f0';
-    for (let i = 0; i < f.max; i++) tri(SW - 11 - i * 9, 187, i < f.hp && f.alive, col, '#302030');
+    const col = f.k === 'lord' ? '#ff3040' : f.k === 'rifle' ? '#f0a020' : '#80a0f0', sp = f.max > 6 ? 7 : 9;
+    for (let i = 0; i < f.max; i++) tri(SW - 11 - i * sp, 187, i < f.hp && f.alive, col, '#302030');
   }
   const s = msg.t > 0 ? msg.text : hint();
   txt(s, SW / 2, 190, msg.t > 0 ? '#f0d890' : '#a0a0b0', 'center', s.length > 44 ? 6.5 : 8);
   const m = Math.floor(game.time / 60), sec = Math.floor(game.time % 60);
   txt(m + ':' + String(sec).padStart(2, '0'), SW - 4, 6, '#c8c0d8', 'right');
+  txt('◆ ' + game.crys, SW - 30, 6, '#80e0ff', 'right', 7);
   txt((lvl + 1) + '/' + LEVELS.length + '  ' + LV.name, 4, 6, '#a8a0c0', 'left', 7);
+}
+
+// Odłamki: rozcięta broń, deski, rękojeść Lorda (gorący koniec żarzy się)
+function drawDebris() {
+  for (const d of DEBRIS) {
+    const ux = Math.cos(d.a) * d.len / 2, uy = Math.sin(d.a) * d.len / 2;
+    ctx.globalAlpha = Math.min(1, d.life * 2);
+    seg([d.x - ux, d.y - uy], [d.x + ux, d.y + uy], 1.8, d.col);
+    if (d.hot > 0) {
+      dot(d.x + ux, d.y + uy, 1, `rgba(255,170,80,${Math.min(1, d.hot * 2)})`);
+      EQ.push({ x: d.x + ux, y: d.y + uy, col: '#ffb060', r: 6, a: 0.5 * Math.min(1, d.hot * 2), rgb: '255,150,60' });
+    }
+  }
+  ctx.globalAlpha = 1;
 }
 
 function draw() {
@@ -1640,6 +1996,7 @@ function draw() {
     for (const f of FOES) if (!f.alive && !(f.st === 'ffall' && f.y > SH)) drawFoe(f);
     for (const f of FOES) if (f.alive) drawFoe(f);
     drawPlayer();
+    drawDebris();
   }
   for (const q of parts) if (!q.e) dot(q.x, q.y, 0.7, q.col);
   lighting();
@@ -1650,6 +2007,12 @@ function draw() {
     ctx.fillStyle = `rgba(${game.blade.rgb},0.4)`; ctx.fillRect(0, 0, SW, 180);
   }
   if (flash) { ctx.globalAlpha = Math.min(0.5, flash.t * 3); ctx.fillStyle = flash.col; ctx.fillRect(0, 0, SW, 180); ctx.globalAlpha = 1; }
+  // Kinowe pasy przy finiszerze
+  if (game.bars > 0.01) {
+    const h = 16 * game.bars;
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, SW, h); ctx.fillRect(0, 180 - h, SW, h);
+    if (game.bars > 0.5 && game.finName) txt(game.finName, SW / 2, 8, `rgba(255,230,170,${(game.bars - 0.5) * 2})`, 'center', 9);
+  }
   if (game.mode !== 'title') drawHUD();
   if (game.mode === 'play' && P.st === 'dead' && P.t > 1.2) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 70, SW, 34);
@@ -1661,7 +2024,7 @@ function draw() {
     const m = Math.floor(game.time / 60), sec = Math.floor(game.time % 60);
     txt('ROZDZIAŁ I UKOŃCZONY', SW / 2, 56, '#f0c040', 'center', 14);
     txt('Mroczny Lord upadł, a cytadela jest wolna.', SW / 2, 80, '#e8d8b0');
-    txt('Czas: ' + m + ':' + String(sec).padStart(2, '0') + '   Życie: ' + P.hp + '/' + P.max, SW / 2, 96, '#e8d8b0');
+    txt('Czas: ' + m + ':' + String(sec).padStart(2, '0') + '   Życie: ' + P.hp + '/' + P.max + '   Kryształy: ' + game.crys, SW / 2, 96, '#e8d8b0');
     txt('A – zagraj ponownie', SW / 2, 124, '#a0a0b0');
   }
   drawText();
