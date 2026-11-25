@@ -65,7 +65,8 @@ Legenda: `_` podłoga · spacja – brak podłogi (w dolnym rzędzie przepaść,
 `L` luźna płyta · `S` kolce · `W` rękojeść · `H` mikstura · `M` duża mikstura · `P` płyta naciskowa ·
 `G` krata · `D` drzwi · `B` skrzynia · `O` kryształ · `C` kryształ ostrza (jeden na rozdział) · `T` terminal · `K` konsola · `E` bariera energetyczna ·
 `Q` ruchome piaski · `U` wylot powietrza · `N` mina podwodna · `I` lód (ślizga się) · `J` grzyb-trampolina ·
-`F` dysza ognia (parzy co kilka sekund) · `V` lawa (śmierć). Motywy `theme` 0–11.
+`F` dysza ognia (parzy co kilka sekund) · `V` lawa (śmierć) · `X` blok aury · `Y` dźwignia. Motywy `theme` 0–11.
+Wrogowie `k`: `blaster`, `rifle`, `shield` (tarczownik), `sniper` (snajper), `jet` (łowca z plecakiem odrzutowym), `drone`, `lord`.
 Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0, c1, sp }` (szerokie, 52 px),
 `wl` poziom wody w px (125 – zalany dolny rząd, -100 – cała komnata pod wodą).
 
@@ -75,6 +76,14 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
 - Wrogowie widzą cię dopiero z bliższej odległości (znak `?` – coś słyszą, `!` – zauważyli).
   Patrolują, trzymają dystans strzału, cofają się przed ostrzem. Blaster 3 trafienia, karabin 4 (później więcej).
   Kucnięcie przepuszcza strzał, zasłona lub cięcie odbija go we wroga.
+- **Nowi wrogowie**: *tarczownik* blokuje ciosy i odbite strzały z przodu – zajdź go od tyłu albo ogłusz aurą;
+  *snajper* celuje czerwonym laserem z daleka szybkim, mocnym strzałem i ucieka przed ostrzem;
+  *łowca* lata na plecaku odrzutowym i strzela ukośnie – zestrzel go odbitym strzałem lub cięciem w powietrzu.
+- **Skradanie**: wróg, który cię nie zauważył (śpi albo stoi tyłem), pada od jednego **cichego ciosu** (A).
+  Bieg i lądowanie słychać z bliska – podchodź krokiem (Shift).
+- **Zagadki aury**: blok `X` przesuwasz odepchnięciem (pchnij) i przyciągnięciem (do siebie); wepchnięty w szczelinę
+  tworzy most, postawiony na płycie `P` trzyma kratę otwartą. Dźwignię `Y` przestawisz klawiszem A albo przyciągnięciem z daleka.
+- **Droid BIP** (od rozdziału II) leci za tobą, co kilka sekund razi pobliskiego wroga i wskazuje ukryty kryształ ostrza w komnacie.
 - Lord (10 trafień) paruje, odskakuje i wpada w furię przy 5 życiach.
 - **Zwarcie ostrzy** (tylko Lordowie): gdy zasłonisz się przed ciosem, Lord sparuje twój cios albo sam naciera,
   ostrza mogą się sczepić. Świat prawie staje, a nad sceną pojawia się sekwencja klawiszy:

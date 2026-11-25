@@ -315,7 +315,8 @@ cv.addEventListener('pointerdown', e => {
 
 // ===== Stan gry =====
 let lvl = 0, LV, MAP, P, FOES, LOOSE, BOLTS, gate, gateT, gateTick, spikes, parts, msg, flash, lamps, DEBRIS, used;
-let ROOMS = [], ri = 0, RD = {}, PLATS = [], MINES = [], WAVES = [];
+let ROOMS = [], ri = 0, RD = {}, PLATS = [], MINES = [], WAVES = [], BLOCKS = [], lever = false;
+const BOT_LVL = 6;   // od rozdziału II towarzyszy nam droid BIP
 const game = { mode: 'title', time: 0, anim: 0, blade: BLADES[0], maxHp: 3, lvlMax: 3, shake: 0, stop: 0, trans: 0, hud: null,
   crys: 0, crysLvl: 0, slowT: 0, bars: 0, finName: '', qte: null,
   sk: null, slots: null, spent: 0, snap: null, tsel: [0, 0], tmsg: '',
@@ -427,8 +428,8 @@ const lordName = f => f.name || 'Mroczny Lord';
 
 function mkFoe(f) {
   const d = diff();
-  const hp = f.k === 'lord' ? 10 : f.k === 'drone' ? 2 + (d > 0.5 ? 1 : 0)
-    : Math.min(5, (f.k === 'rifle' ? 4 : 3) + (d >= 0.35 ? 1 : 0));
+  const hp = f.k === 'lord' ? 10 : f.k === 'drone' ? 2 + (d > 0.5 ? 1 : 0) : f.k === 'jet' ? 3 + (d > 0.6 ? 1 : 0)
+    : f.k === 'sniper' ? 2 : Math.min(5, (f.k === 'rifle' || f.k === 'shield' ? 4 : 3) + (d >= 0.35 ? 1 : 0));
   const o = {
     k: f.k, x: f.c * TW + 16, y: floorY(f.r), r: f.r, dir: f.dir, hx: f.c * TW + 16,
     st: f.sleep ? 'sleep' : f.k === 'lord' ? 'meditate' : 'idle', t: 0, hp, max: hp, alive: true,
@@ -436,7 +437,7 @@ function mkFoe(f) {
     white: 0, mf: 0, bb: 0, trail: [], aw: false, lost: 0, wait: Math.random(), mv: 0, sd: 0, sdt: 0, fury: false,
     sty: f.sty, name: f.name, dbl: !!f.dbl, dual: !!f.dual, ph: 0, lv: Math.min(4, lordLv()), mark: null, lift: 0,
   };
-  if (f.k === 'drone') { o.y = o.hy = f.r * RH + 30; o.ph = Math.random() * 6; }
+  if (f.k === 'drone' || f.k === 'jet') { o.y = o.hy = f.r * RH + 30; o.ph = Math.random() * 6; }
   return o;
 }
 
@@ -444,9 +445,10 @@ function mkFoe(f) {
 function mkRoom(R) {
   const D = Object.assign({ theme: LV.theme, sky: LV.sky, lore: LV.lore, wl: 999 }, R);
   const map = R.map.map(s => s.split(''));
-  const loose = [], sp = {}, lm = [], mines = [];
+  const loose = [], sp = {}, lm = [], mines = [], blocks = [];
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
     const ch = map[r][c];
+    if (ch === 'X') { blocks.push({ r, c, ox: 0, oy: 0 }); map[r][c] = '_'; }
     if (ch === 'L') loose.push({ r, c, st: 'ok', t: 0, y: 0, vy: 0, rr: -1 });
     if (ch === 'S') sp[r + ',' + c] = 0;
     if (ch === 'N') mines.push({ r, c, x: c * TW + 16, y0: r * RH + 30, y: r * RH + 30, alive: true });
@@ -458,13 +460,14 @@ function mkRoom(R) {
     }
   }
   const plats = (R.plats || []).map(q => ({ r: q.r, x0: q.c0 * TW + 16, x1: q.c1 * TW + 16, x: q.c0 * TW + 16, v: q.sp, w: 26, dx: 0 }));
-  return { D, map, foes: (R.foes || []).map(mkFoe), loose, spikes: sp, lamps: lm, plats, mines };
+  return { D, map, foes: (R.foes || []).map(mkFoe), loose, spikes: sp, lamps: lm, plats, mines, blocks };
 }
 
 function enterRoom(k) {
   ri = k; const R = ROOMS[k];
   RD = R.D; MAP = R.map; FOES = R.foes; LOOSE = R.loose; spikes = R.spikes; lamps = R.lamps;
-  PLATS = R.plats; MINES = R.mines;
+  PLATS = R.plats; MINES = R.mines; BLOCKS = R.blocks;
+  if (game.bot) { game.bot.told = false; game.bot.x = P ? P.x : game.bot.x; }
   BOLTS = []; parts = []; DEBRIS = []; WAVES = [];
   const key = lvl + ':' + k;
   if (!BGS[key]) BGS[key] = buildBG(RD);
@@ -474,7 +477,8 @@ function loadLevel(i) {
   lvl = i; LV = LEVELS[i];
   game.lvlMax = game.maxHp;
   BOLTS = []; parts = []; DEBRIS = []; WAVES = []; flash = null; used = false;
-  gate = 0; gateT = 0; gateTick = 0;
+  gate = 0; gateT = 0; gateTick = 0; lever = false; BLOCKS = [];
+  game.bot = !LV.ship && lvl >= BOT_LVL ? { x: 0, y: 0, cd: 2, zap: 0, told: false, ping: null, hello: lvl === BOT_LVL ? 2.6 : 0 } : null;
   game.shake = 0; game.stop = 0; game.hud = null; game.slowT = 0; game.bars = 0; game.qte = null; game.lock = null; game.lockCd = 0;
   game.crysLvl = game.crys; game.hurtLvl = 0;
   if (!game.sk) skReset();
@@ -500,6 +504,7 @@ function loadLevel(i) {
     sword: i > 0, drawn: false, hang: null, hit: false, fd: 0, inv: 0, combo: 0, q: false, ign: 0, trail: [],
     aura: 100, o2: 10, ot: 1.5, sink: 0, ph: 0, pw: 0,
   };
+  if (game.bot) { game.bot.x = P.x - P.dir * 16; game.bot.y = P.y - 40; }
   say(drop ? (LV.dropMsg || 'Spadasz z nocnego nieba...') : 'Poziom ' + (i + 1) + ': ' + LV.name, 2.5);
   stripBladeCrystals();
   saveRun();
@@ -556,7 +561,9 @@ function hasFloor(r, c) {
 // Ruchoma platforma pod punktem (r, x)
 const platAt = (r, x) => PLATS.find(q => q.r === r && Math.abs(x - q.x) <= q.w + 2);
 const floorAt = (r, x) => hasFloor(r, colOf(x)) || !!platAt(r, x);
-const isWall = (r, c) => cell(r, c) === '#';
+const isWall = (r, c) => cell(r, c) === '#' || blockAt(r, c);
+// Blok poruszany aurą (X w mapie) – zachowuje się jak mur, ale tylko w bieżącej komnacie
+const blockAt = (r, c) => c >= 0 && c < COLS && BLOCKS.some(b => b.r === r && b.c === c);
 const gateBlocks = (r, c) => cell(r, c) === 'G' && gate < 0.8;
 // Bariera energetyczna pulsuje (2 s włączona, 1,2 s wyłączona); konsola K wyłącza ją na stałe
 const barrierOn = c => !used && ((game.anim + c * 0.37) % 3.2) < 2;
@@ -660,7 +667,7 @@ function updDebris(dt) {
 
 // ===== Gracz =====
 const playerOnRow = r => !P.air && P.r === r && P.st !== 'dead' && HANGST.indexOf(P.st) < 0;
-const fightable = f => f.alive && !f.air && f.k !== 'drone' && !['sleep', 'meditate', 'rise', 'knock', 'pulled', 'choke'].includes(f.st);
+const fightable = f => f.alive && !f.air && !isDrone(f) && !['sleep', 'meditate', 'rise', 'knock', 'pulled', 'choke'].includes(f.st);
 
 // Najbliższy przeciwnik, z którym gracz wchodzi w pozycję walki
 function engaged() {
@@ -843,6 +850,7 @@ function tryPick() {
 // Terminal z zapiskami i konsola sterująca
 function tryUse() {
   const ch = cell(P.r, colOf(P.x));
+  if (ch === 'Y') { P.st = 'use'; P.t = 0; flipLever(P.r, colOf(P.x)); return true; }
   if (ch !== 'T' && ch !== 'K') return false;
   P.st = 'use'; P.t = 0; SND.click();
   if (ch === 'T') say(RD.lore || 'Terminal milczy.', 5);
@@ -853,6 +861,60 @@ function tryUse() {
     say('Konsola: bariery wyłączone, kraty zablokowane w górze.', 3);
   }
   return true;
+}
+
+// Dźwignia (Y) – przestawiona ręką albo pociągnięta aurą z daleka; otwiera kraty na stałe
+function flipLever(r, c) {
+  MAP[r][c] = 'y'; lever = true;
+  SND.click(); SND.thud(); shake(1);
+  sparks(c * TW + 16, floorY(r) - 10, '#60ff80', 8);
+  say('Dźwignia przestawiona – krata otwarta na stałe!', 2.5);
+}
+
+// Blok aury (X): przesuwa się o kafel; nad dziurą spada i staje się mostem, na płycie trzyma kratę
+const BLOCK_RANGE = 4;   // zasięg mocy wobec bloków i dźwigni [kafle]
+function blockAhead(d) {
+  if (P.st === 'swim') return null;
+  const pc = colOf(P.x);
+  for (let i = 1; i <= BLOCK_RANGE; i++) {
+    const c = pc + d * i;
+    const b = BLOCKS.find(q => q.r === P.r && q.c === c);
+    if (b) return { b, i };
+    if (isWall(P.r, c) || gateBlocks(P.r, c)) return null;
+  }
+  return null;
+}
+function moveBlock(b, s) {
+  const c2 = b.c + s;
+  if (c2 < 0 || c2 >= COLS || isWall(b.r, c2) || gateBlocks(b.r, c2) || 'DEV'.includes(cell(b.r, c2))) return false;
+  if (!P.air && P.r === b.r && colOf(P.x) === c2) return false;
+  if (FOES.some(f => f.alive && !isDrone(f) && f.r === b.r && colOf(f.x) === c2)) return false;
+  const r0 = b.r;
+  b.c = c2; b.ox = -s * TW;
+  let r = r0;
+  while (!hasFloor(r, c2) && r < ROWS - 1 && !isWall(r + 1, c2)) r++;
+  if (!hasFloor(r, c2)) {
+    // Przepaść bez dna – blok przepada
+    BLOCKS.splice(BLOCKS.indexOf(b), 1); SND.crash(); shake(2);
+    burst(c2 * TW + 16, floorY(r0), 12, '#8a8a9a', 80, 40);
+    say('Blok runął w przepaść.', 1.5);
+    return true;
+  }
+  if (r > r0) {
+    b.r = r; b.oy = -(r - r0) * RH;
+    MAP[r - 1][c2] = '_';   // wierzch bloku staje się podłogą rzędu wyżej
+    delete spikes[r + ',' + c2];
+    SND.crash(); shake(3); burst(c2 * TW + 16, floorY(r), 14, '#8a8a9a', 90, 50);
+    say('Blok wpada w szczelinę – powstaje most!', 2);
+  } else { SND.thud(); shake(1); }
+  if (cell(b.r, c2) === 'P') { SND.click(); say('Blok dociska płytę – krata stoi otworem.', 2); }
+  return true;
+}
+function updBlocks(dt) {
+  for (const b of BLOCKS) {
+    b.ox = Math.sign(b.ox) * Math.max(0, Math.abs(b.ox) - dt * 180);
+    b.oy = Math.min(0, b.oy + dt * 320);
+  }
 }
 
 // Skrzynia w zasięgu cięcia (ten sam kafel albo przed graczem)
@@ -881,7 +943,7 @@ const atDoor = () => cell(P.r, colOf(P.x)) === 'D';
 
 // Czy przed graczem stoi żywy przeciwnik (nie da się go przejść)?
 function foeAhead(dir) {
-  return FOES.some(f => f.alive && !f.air && f.k !== 'drone' && f.r === P.r && Math.sign(f.x - P.x) === dir && Math.abs(f.x - P.x) < 16);
+  return FOES.some(f => f.alive && !f.air && !isDrone(f) && f.r === P.r && Math.sign(f.x - P.x) === dir && Math.abs(f.x - P.x) < 16);
 }
 
 function toFight() {
@@ -928,7 +990,10 @@ function startFinisher(f, fv) {
 // ===== Aura: przyciąganie (Z) i odpychanie (X) =====
 const AURAST = ['stand', 'run', 'step', 'turn', 'fight', 'fstep', 'land', 'crouch', 'swim'];
 const bodyY = () => P.st === 'swim' ? P.y : P.y - 18;
-const isDrone = f => f.k === 'drone';
+const isDrone = f => f.k === 'drone' || f.k === 'jet';
+// Tarcza tarczownika zatrzymuje ciosy i strzały z przodu (s – strona ataku względem wroga), chyba że jest ogłuszony
+const shieldUp = (f, s) => f.k === 'shield' && f.alive && s === f.dir && !['tstun', 'knock', 'pulled', 'choke', 'sleep', 'fin', 'fdead'].includes(f.st);
+const FOENAME = { blaster: 'Strażnik z blasterem', rifle: 'Szturmowiec z karabinem', shield: 'Tarczownik', sniper: 'Snajper' };
 const pullable = f => f.alive && !['fin', 'fdead', 'ffall', 'gone', 'pulled', 'meditate', 'rise', 'choke'].includes(f.st);
 const PNAME = { pull: 'Przyciąganie', push: 'Odepchnięcie', shield: 'Tarcza', trick: 'Omamienie', heal: 'Uzdrowienie',
   throw: 'Rzut ostrzem', choke: 'Uścisk', bolt: 'Pioruny' };
@@ -1079,6 +1144,7 @@ function updThrow(dt) {
       f.st = 'gblock'; f.t = 0; f.aw = true; SND.clash();
       sparks(q.x, q.y, RED.col, 10); q.back = true; continue;
     }
+    if (shieldUp(f, Math.sign(q.x - f.x))) { SND.clash(); sparks(q.x, q.y, '#a0c8ff', 8); q.back = true; f.aw = true; continue; }
     hitFoe(f, 1, q.back ? -q.dir : q.dir);
   }
   for (const b of BOLTS) if (b.o === 'e' && Math.abs(b.x - q.x) < 10 && Math.abs(b.y - q.y) < 10) { b.dead = true; sparks(b.x, b.y, '#ff6040', 5); }
@@ -1112,9 +1178,11 @@ function auraPush() {
   // Strzały wracają do strzelców, miny eksplodują, skrzynie pękają
   for (const b of BOLTS) {
     if (b.o !== 'e' || Math.abs(b.x - P.x) > pushRange() - 20 || Math.abs(b.y - by) > 30) continue;
-    b.vx = d * Math.abs(b.vx) * 1.15; b.o = 'p'; SND.deflect(); n++;
+    b.vx = d * Math.abs(b.vx) * 1.15; b.vy = -(b.vy || 0); b.o = 'p'; SND.deflect(); n++;
   }
   for (const m of MINES) if (m.alive && Math.hypot(m.x - P.x, m.y - by) < pushRange() - 10 && (m.x - P.x) * d > -10) { mineBoom(m, false); n++; }
+  const bk = blockAhead(d);
+  if (bk && moveBlock(bk.b, d)) { n++; burst(bk.b.c * TW + 16 - d * 14, floorY(bk.b.r) - 30, 8, '#c0d0ff', 50, 30, true); }
   if (P.st !== 'swim') for (let c = 0; c < COLS; c++) {
     if (cell(P.r, c) !== 'B') continue;
     const dx = (c * TW + 16 - P.x) * d;
@@ -1135,7 +1203,18 @@ function auraPull() {
     if (dx < bd) { bd = dx; best = f; }
   }
   if (!best) {
-    // Bez celu – przyciągnij kryształ lub miksturę z odległości do 4 kafli
+    // Bez celu: blok przesuwa się ku graczowi, dźwignia przestawia się z daleka
+    const bk = blockAhead(d);
+    if (bk && bk.i >= 2 && moveBlock(bk.b, -d)) return;
+    if (!sw) for (let i = 1; i <= BLOCK_RANGE + 1; i++) {
+      const c = colOf(P.x) + d * i;
+      if (isWall(P.r, c) || c < 0 || c >= COLS) break;
+      if (cell(P.r, c) === 'Y') {
+        for (let k = 0; k < 8; k++) burst(c * TW + 16 - d * k * 4 * i, P.y - 14, 1, '#c0e0ff', 30, 20, true);
+        flipLever(P.r, c); return;
+      }
+    }
+    // Przyciągnij kryształ lub miksturę z odległości do 4 kafli
     if (!sw) for (let i = 1; i <= Math.min(4, 1 + skl('pull')); i++) {
       const c = colOf(P.x) + d * i, ch = cell(P.r, c);
       if (isWall(P.r, c)) break;
@@ -1460,6 +1539,36 @@ function updDrone(f, dt) {
 }
 
 // ===== Ruchome platformy =====
+// ===== Droid towarzysz BIP: leci za graczem, razi wrogów, wskazuje kryształy ostrzy =====
+function updBot(dt) {
+  const B = game.bot;
+  if (!B) return;
+  if (B.hello > 0 && (B.hello -= dt) <= 0) say('Dołącza do ciebie droid zwiadowczy BIP – razi wrogów i wskazuje kryształy ostrzy.', 4);
+  const tx = P.x - P.dir * 16, ty = (P.st === 'swim' ? P.y : P.y - 40) + Math.sin(game.anim * 3) * 3;
+  B.x += (tx - B.x) * Math.min(1, dt * 3); B.y += (ty - B.y) * Math.min(1, dt * 3);
+  B.zap = Math.max(0, B.zap - dt);
+  if (P.st === 'dead') return;
+  if ((B.cd -= dt) <= 0) {
+    B.cd = 1;
+    let best = null, bd = 120;
+    for (const f of FOES) {
+      if (!f.alive || !f.aw || f.k === 'lord' || ['fin', 'fdead', 'ffall', 'gone', 'jfall'].includes(f.st)) continue;
+      const fy = isDrone(f) ? f.y : f.y - 20, d = Math.hypot(f.x - B.x, fy - B.y);
+      if (d < bd) { bd = d; best = f; }
+    }
+    if (best) {
+      B.cd = 5; B.zap = 0.25; B.tx = best.x; B.ty = isDrone(best) ? best.y : best.y - 20;
+      SND.zap(); sparks(B.tx, B.ty, '#80e0ff', 8);
+      const st = best.st;
+      if (!hitFoe(best, 1, Math.sign(best.x - P.x) || 1) && !isDrone(best) && st !== 'knock') { best.st = 'tstun'; best.t = 0.2; }
+    }
+  }
+  // Wskazówka kryształu ostrza w tej komnacie
+  B.ping = null;
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (cell(r, c) === 'C') B.ping = { x: c * TW + 16, y: floorY(r) - 10 };
+  if (B.ping && !B.told) { B.told = true; tone(1500, 0.06, 'sine', 0.04, 2200); setTimeout(() => tone(1900, 0.06, 'sine', 0.04, 2400), 90); say('BIP: Wykrywam kryształ ostrza w pobliżu!', 2); }
+}
+
 function updPlats(dt) {
   for (const q of PLATS) {
     let nx = q.x + q.v * dt;
@@ -1792,6 +1901,22 @@ function resolveStrike() {
     if (d < bd) { bd = d; t = f; }
   }
   if (!t) { const c = crateAhead(); if (c >= 0) breakCrate(c); return; }
+  // Cichy cios: nieświadomy strażnik zaskoczony od tyłu (śpiący – z każdej strony) pada od razu
+  if (t.k !== 'lord' && !t.aw && (t.st === 'sleep' || (t.st === 'idle' && Math.sign(t.x - P.x) === t.dir))) {
+    game.cause = 'stealth'; game.stealth++;
+    hitFoe(t, t.hp, P.dir);
+    game.cause = '';
+    if (t.st === 'fin') { startFinisher(t, 2); game.finName = 'CICHY CIOS'; }
+    say('Cichy cios! Wróg nie zdążył podnieść alarmu. +2 ◆', 2);
+    return;
+  }
+  if (shieldUp(t, Math.sign(P.x - t.x))) {
+    SND.clash(); shake(1); game.stop = 0.04;
+    sparks(t.x + t.dir * 10, P.y - 22, game.blade.col, 8); sparks(t.x + t.dir * 10, P.y - 22, '#a0c8ff', 6);
+    t.st = 'sblock'; t.t = 0; t.aw = true;
+    if (!game.tipShield) { game.tipShield = true; say('Tarcza! Zajdź go od tyłu albo ogłusz falą aury (X).', 3); }
+    return;
+  }
   if (t.st === 'gblock') {
     if (t.k === 'lord' && Math.random() < 0.3 && startLock(t)) return;
     SND.clash(); shake(2); game.stop = 0.05;
@@ -1815,7 +1940,9 @@ function hitFoe(f, n, dir) {
       f.alive = false; f.st = 'gone'; f.t = 0;
       burst(f.x, f.y, 18, '#ffb060', 140, 100, true); burst(f.x, f.y, 8, '#60e0ff', 90, 80, true);
       for (let i = 0; i < 3; i++) debris(f.x, f.y, f.r, (Math.random() - 0.5) * 160, -60 - Math.random() * 80, 3, '#2a3440', 0.5);
-      SND.crash(); say('Dron zniszczony. +1 ◆', 1.2); addCrys(1, f.x, f.y);
+      SND.crash(); addCrys(f.k === 'jet' ? 2 : 1, f.x, f.y);
+      say(f.k === 'jet' ? 'Łowca strącony! +2 ◆' : 'Dron zniszczony. +1 ◆', 1.2);
+      if (f.k === 'jet') { f.alive = false; f.st = 'jfall'; f.vy = -40; f.vx = dir * 60; }
       onKill(f);
       return true;
     }
@@ -1830,14 +1957,14 @@ function hitFoe(f, n, dir) {
       say(lordName(f) + ' – pojedynek wygrany! Pole siłowe gaśnie.', 4);
       SND.lord(); shake(4); flash = { col: '#ffffff', t: 0.3 };
       sparks(f.x, f.y - 30, RED.col, 30); addCrys(10, f.x, f.y - 30);
-    } else { say((f.k === 'rifle' ? 'Szturmowiec z karabinem pokonany.' : 'Strażnik z blasterem pokonany.') + ' +2 ◆', 2); addCrys(2, f.x, f.y - 20); }
+    } else { say((FOENAME[f.k] || 'Przeciwnik') + ' pokonany. +2 ◆', 2); addCrys(2, f.x, f.y - 20); }
     foePush(f, dir * 6);
     onKill(f);
     if (f.st === 'fdead') {
       // Upadek zamiast natychmiastowej śmierci; broń szturmowca rozcięta na pół
       f.st = 'fin'; f.t = 0; f.fd = dir; f.hd = false;
       if (f.k !== 'lord') {
-        const L = f.k === 'rifle' ? 6 : 4;
+        const L = f.k === 'rifle' || f.k === 'sniper' ? 6 : 4;
         debris(f.x + f.dir * 8, f.y - 21, f.r, dir * 50 + 20, -150, L, '#1e2026', 0.8);
         debris(f.x + f.dir * 12, f.y - 21, f.r, dir * 90 - 10, -110, L, '#2a2e36', 0.8);
         sparks(f.x + f.dir * 10, f.y - 21, '#ffb060', 8);
@@ -1883,8 +2010,8 @@ function patrol(f, dt) {
 }
 
 function shoot(f) {
-  const v = (f.k === 'rifle' ? 210 : 180) * (1 + 0.3 * diff());
-  BOLTS.push({ x: f.x + f.dir * 14, y: f.y - 21, r: f.r, vx: f.dir * v, o: 'e', src: f });
+  const v = (f.k === 'sniper' ? 360 : f.k === 'rifle' ? 210 : 180) * (1 + 0.3 * diff());
+  BOLTS.push({ x: f.x + f.dir * 14, y: f.y - 21, r: f.r, vx: f.dir * v, o: 'e', src: f, big: f.k === 'sniper' });
   f.mf = 0.06; SND.blast();
 }
 
@@ -1928,9 +2055,62 @@ function updFoe(f, dt) {
     else if (f.t > 1.25) { f.st = 'fdead'; f.t = 0; }
     return;
   }
+  if (f.st === 'jfall') {
+    // Strącony łowca spiralą spada w dół i wybucha
+    f.vy += GRAV * 0.6 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.ph += dt * 14;
+    if (Math.random() < dt * 30) burst(f.x, f.y, 1, Math.random() < 0.5 ? '#ffb060' : '#606060', 30, 20, true);
+    if (f.y > SH + 10 || solidAt(f.x, f.y + 6)) {
+      f.st = 'gone'; SND.crash(); shake(2);
+      burst(f.x, Math.min(f.y, SH - 4), 16, '#ffb060', 130, 90, true);
+    }
+    return;
+  }
   if (!f.alive) return;
-  if (isDrone(f)) updDrone(f, dt);
+  if (f.k === 'jet') updJet(f, dt);
+  else if (isDrone(f)) updDrone(f, dt);
   else if (f.k === 'lord') updLord(f, dt); else updTrooper(f, dt);
+}
+
+// ===== Łowca z plecakiem odrzutowym: unosi się nad graczem i strzela ukośnie =====
+function updJet(f, dt) {
+  f.ph += dt;
+  const py = bodyY(), dx = P.x - f.x, dy = py - f.y, d = Math.hypot(dx, dy) || 1;
+  const df = diff();
+  const go = (vx, vy) => {
+    const nx = f.x + vx * dt, ny = Math.max(10, Math.min(160, f.y + vy * dt));
+    if (nx > 8 && nx < SW - 8 && !solidAt(nx, ny) && !solidAt(nx, ny + 14)) { f.x = nx; f.y = ny; } else f.vx = 0;
+  };
+  if (Math.abs(f.vx) > 5) { go(f.vx, 0); f.vx *= Math.pow(0.05, dt); }
+  if (Math.random() < dt * 25) burst(f.x - f.dir * 5, f.y + 14, 1, Math.random() < 0.5 ? '#ffb060' : '#60e0ff', 20, 0, true);
+  if (P.st === 'dead') f.st = 'idle';
+  switch (f.st) {
+    case 'sleep': case 'idle':
+      f.y += (f.hy + Math.sin(f.ph * 2) * 5 - f.y) * Math.min(1, dt * 2);
+      if (d < 130 && P.st !== 'dead') { f.st = 'chase'; f.t = 0; f.cd = 1; f.aw = true; f.mark = { s: '!', t: 1 }; SND.alarm(); }
+      break;
+    case 'chase': {
+      f.dir = Math.sign(dx) || f.dir;
+      // Pozycja nad graczem, z boku: 60–90 px w poziomie, ok. 45 px wyżej
+      const side = f.x < P.x ? -1 : 1, tx = P.x + side * 75, ty = py - 32;
+      const ex = tx - f.x, ey = ty - f.y, el = Math.hypot(ex, ey) || 1, sp = 55 * (1 + 0.3 * df);
+      if (el > 6) go(ex / el * sp, ey / el * sp);
+      else f.y += Math.sin(f.ph * 3) * 0.3;
+      f.cd -= dt;
+      if (f.cd <= 0 && d < 200) {
+        const v = 170 * (1 + 0.2 * df);
+        BOLTS.push({ x: f.x + f.dir * 8, y: f.y + 2, r: f.r, vx: dx / d * v, vy: dy / d * v, o: 'e', src: f });
+        f.mf = 0.06; SND.blast(); f.cd = 1.6 - 0.5 * df + Math.random() * 0.6;
+      }
+      if (d > 260) { f.st = 'idle'; f.hy = f.y; }
+      break;
+    }
+    case 'back':
+      go(-dx / d * 60, -30);
+      if (f.t > 0.7) { f.st = 'chase'; f.t = 0; f.cd = Math.max(f.cd, 0.4); }
+      break;
+    default: f.st = 'chase';
+  }
+  f.r = Math.max(0, Math.min(ROWS - 1, Math.floor(f.y / RH)));
 }
 
 // Odrzut falą aury: ślizg po podłodze; przepaść, kolce albo ściana
@@ -1962,9 +2142,11 @@ function knock(f, dt) {
 function updTrooper(f, dt) {
   const dx = P.x - f.x, d = Math.abs(dx);
   const same = playerOnRow(f.r), df = diff(), dk = 1 - 0.35 * df;
-  // Nieświadomy strażnik widzi tylko przed sobą i z bliska (albo słyszy tuż za plecami)
-  const vis = 100 + 20 * df;
-  const see = same && los(f.r, f.x, P.x) && (f.aw ? d < 200 : ((Math.sign(dx) === f.dir && d < vis) || d < 36));
+  const snip = f.k === 'sniper', shd = f.k === 'shield';
+  // Nieświadomy strażnik widzi tylko przed sobą i z bliska; za plecami słyszy bieg/lądowanie albo oddech tuż obok
+  const vis = (snip ? 170 : 100) + 20 * df;
+  const hear = d < 14 || (d < 36 && ['run', 'land', 'jump', 'fall'].includes(P.st));
+  const see = same && los(f.r, f.x, P.x) && (f.aw ? d < (snip ? 260 : 200) : ((Math.sign(dx) === f.dir && d < vis) || hear));
   if (see) { if (!f.aw) { f.aw = true; f.cd = Math.max(f.cd, 0.5); f.mark = { s: '!', t: 1 }; } f.lost = 0; }
   else if (f.aw && (f.lost += dt) > 4) { f.aw = false; f.mark = { s: '?', t: 1 }; }
   switch (f.st) {
@@ -1978,8 +2160,9 @@ function updTrooper(f, dt) {
       f.dir = Math.sign(dx) || f.dir;
       if (d < 22) { f.st = 'bash'; f.t = 0; f.hit = false; break; }
       // Taktyka: trzyma dystans strzału, cofa się przed ostrzem i przestępuje z nogi na nogę
-      const pref = f.k === 'rifle' ? 110 : 85;
-      if (d < 44 && P.sword) foeMove(f, -f.dir * 26 * dt);
+      const pref = snip ? 180 : shd ? 40 : f.k === 'rifle' ? 110 : 85;
+      if (snip && d < 120) foeMove(f, -f.dir * 30 * dt);
+      else if (d < 44 && P.sword && !shd) foeMove(f, -f.dir * 26 * dt);
       else if (d > pref + 25) foeMove(f, f.dir * 28 * dt);
       else {
         f.sdt -= dt;
@@ -1994,15 +2177,16 @@ function updTrooper(f, dt) {
       if (!see) { f.st = 'idle'; break; }
       f.dir = Math.sign(dx) || f.dir;
       if (d < 22) { f.st = 'bash'; f.t = 0; f.hit = false; break; }
-      if (f.t > 0.45 - 0.15 * df) { f.st = 'fire'; f.t = 0; f.shots = f.k === 'rifle' ? 2 : 1; f.ft = 0; }
+      if (f.t > (snip ? 1.0 - 0.2 * df : 0.45 - 0.15 * df)) { f.st = 'fire'; f.t = 0; f.shots = f.k === 'rifle' ? 2 : 1; f.ft = 0; }
       break;
     case 'fire':
       f.ft -= dt;
       if (f.shots > 0 && f.ft <= 0) { shoot(f); f.shots--; f.ft = 0.14; }
       if (f.shots <= 0 && f.t > 0.3) {
-        f.st = 'idle'; f.cd = (f.k === 'rifle' ? 1.5 + Math.random() * 0.8 : 1.1 + Math.random() * 0.7) * dk;
+        f.st = 'idle'; f.cd = (snip ? 2.2 + Math.random() * 0.6 : f.k === 'rifle' ? 1.5 + Math.random() * 0.8 : 1.1 + Math.random() * 0.7) * dk;
       }
       break;
+    case 'sblock': if (f.t > 0.3) { if (d < 26) { f.st = 'bash'; f.t = 0; f.hit = false; } else { f.st = 'idle'; f.cd = Math.max(f.cd, 0.3); } } break;
     case 'bash':
       if (!f.hit && f.t > 0.3) {
         f.hit = true;
@@ -2019,7 +2203,7 @@ function updTrooper(f, dt) {
     case 'thurt':
       if (f.t > 0.32) {
         // Po trafieniu czasem odskakuje do tyłu i od razu składa się do strzału
-        if (d < 50 && Math.random() < 0.4) { f.st = 'dodge'; f.t = 0; SND.swing(); }
+        if (d < 50 && Math.random() < (shd ? 0 : 0.4)) { f.st = 'dodge'; f.t = 0; SND.swing(); }
         else { f.st = 'idle'; f.cd = Math.max(f.cd, 0.4); }
       }
       break;
@@ -2110,6 +2294,19 @@ function updBolts(dt) {
   for (const b of BOLTS) {
     const px = b.x;
     b.x += b.vx * dt;
+    if (b.vy) {
+      // Strzał ukośny (łowca): leci przez rzędy, gaśnie na podłodze
+      const py = b.y; b.y += b.vy * dt;
+      const r0 = Math.floor(py / RH), r1 = Math.floor(b.y / RH);
+      if (b.y < -10 || b.y > SH + 10) { b.dead = true; continue; }
+      if (b.vy > 0 && r1 >= 0 && r1 < ROWS && py <= floorY(r1) && b.y > floorY(r1) && hasFloor(r1, colOf(b.x))) {
+        b.dead = true; burst(b.x, floorY(r1), 5, '#ff6040', 60, 40, true); continue;
+      }
+      if (b.vy < 0 && r0 > 0 && py >= floorY(r0 - 1) && b.y < floorY(r0 - 1) && hasFloor(r0 - 1, colOf(b.x))) {
+        b.dead = true; burst(b.x, floorY(r0 - 1), 5, '#ff6040', 60, 40, true); continue;
+      }
+      b.r = Math.max(0, Math.min(ROWS - 1, r1));
+    }
     const lo = Math.min(px, b.x), hi = Math.max(px, b.x);
     const c = colOf(b.x);
     if (b.x < -10 || b.x > SW + 10) { b.dead = true; continue; }
@@ -2126,6 +2323,7 @@ function updBolts(dt) {
         if (isDrone(f) ? Math.abs(f.y - b.y) > 10 : f.r !== b.r) continue;
         b.dead = true;
         if (f.k === 'lord') { SND.deflect(); sparks(b.x, b.y, RED.col, 8); }   // Lord odbija strzały ostrzem
+        else if (shieldUp(f, -Math.sign(b.vx))) { SND.deflect(); sparks(b.x, b.y, '#a0c8ff', 8); }   // tarcza łapie strzał
         else { game.cause = 'mirror'; hitFoe(f, 1, Math.sign(b.vx)); game.cause = ''; }
         break;
       }
@@ -2139,14 +2337,14 @@ function boltHitsPlayer(b) {
   const armed = P.sword && facing && !P.thr;
   if (P.sh > 0) {
     // Tarcza aury: łapie strzał, od poziomu 3 odbija go do strzelca
-    if (skl('shield') >= 3) { b.vx = -b.vx * 1.1; b.o = 'p'; b.x += Math.sign(b.vx) * 6; }
+    if (skl('shield') >= 3) { b.vx = -b.vx * 1.1; b.vy = -(b.vy || 0); b.o = 'p'; b.x += Math.sign(b.vx) * 6; }
     else b.dead = true;
     SND.deflect(); burst(b.x, b.y, 8, '#80c0ff', 80, 50, true);
     return;
   }
   if (armed && (P.st === 'block' || P.st === 'strike' || P.st === 'fin' || P.as > 0)) {
     // Cios lub zasłona odbija strzał prosto w strzelca
-    b.vx = -b.vx * 1.15; b.o = 'p';
+    b.vx = -b.vx * 1.15; b.vy = -(b.vy || 0); b.o = 'p';
     SND.deflect(); shake(1);
     sparks(b.x, b.y, game.blade.col, 8);
     return;
@@ -2190,11 +2388,12 @@ function updLoose(dt) {
 }
 
 function plateDown() {
+  if (BLOCKS.some(b => cell(b.r, b.c) === 'P')) return true;
   return !P.air && P.st !== 'dead' && HANGST.indexOf(P.st) < 0 && cell(P.r, colOf(P.x)) === 'P';
 }
 
 function updGate(dt) {
-  if (used) { gate = Math.min(1, gate + dt * 1.5); gateT = 1; return; }   // konsola otworzyła kratę na stałe
+  if (used || lever) { gate = Math.min(1, gate + dt * 1.5); gateT = 1; return; }   // konsola lub dźwignia otworzyła kratę na stałe
   const on = plateDown();
   if (on) {
     if (gateT <= 0) { SND.click(); if (gate < 0.8) say('Gdzieś zgrzytnęła krata...', 2); }
@@ -2281,6 +2480,8 @@ function update(dt) {
   for (const w of WAVES) w.t += dt;
   WAVES = WAVES.filter(w => w.t < 0.5);
   updLoose(dt);
+  updBlocks(dt);
+  updBot(dt);
   updGate(dt);
   updSpikes(dt);
   updBolts(dt);
@@ -2766,6 +2967,18 @@ const STY = {
   rifle: { type: 'trooper', hand: '#22241e', handB: '#16170f', arm: '#5e6454', armB: '#3e4438',
     body: '#6e7462', plate: '#9aa08a', leg: '#3a3e34', legB: '#26291f', boot: '#141510', belt: '#22241e',
     helm: '#4a5040', helmB: '#2a2e24', visor: '#ffb020', stripe: '#ff9020', thick: 5 },
+  // Tarczownik – ciężki pancerz w kolorze stali, niebieski wizjer
+  shield: { type: 'trooper', hand: '#2a2e38', handB: '#1a1d24', arm: '#6a7890', armB: '#4a566a',
+    body: '#7a88a0', plate: '#b0c0d8', leg: '#3e4a5c', legB: '#2a3240', boot: '#14181e', belt: '#2a2e38',
+    helm: '#4a5a72', helmB: '#2a3444', visor: '#60b0ff', stripe: '#a0c8ff', thick: 6 },
+  // Snajper – ciemna peleryna, czerwony celownik
+  sniper: { type: 'trooper', hand: '#1a1a1e', handB: '#101012', arm: '#3a3a44', armB: '#26262e',
+    body: '#44444e', plate: '#6a6a78', leg: '#2a2a32', legB: '#1a1a20', boot: '#0c0c0e', belt: '#1a1a1e',
+    helm: '#32323a', helmB: '#1e1e24', visor: '#ff2050', stripe: '#ff6080', thick: 5 },
+  // Łowca z plecakiem odrzutowym – zielono-szary pancerz
+  jet: { type: 'trooper', hand: '#2a3028', handB: '#1a1e18', arm: '#5a7060', armB: '#3e5044',
+    body: '#6a8270', plate: '#a0c0a8', leg: '#3a4a3e', legB: '#26322a', boot: '#141a16', belt: '#2a3028',
+    helm: '#4a6252', helmB: '#2a3a30', visor: '#60e0a0', stripe: '#60e0a0', thick: 5 },
   lord: { type: 'lord', skin: '#cfc4c4', hand: '#1a1418', handB: '#100c0f', arm: '#2a1e28', armB: '#1a1219',
     body: '#2a1e28', leg: '#1e161c', legB: '#120d11', boot: '#0a080a', belt: '#6a1420',
     cloak: '#1c1219', cloakB: '#0e0a0e', hood: '#120d12', eye: '#ff2020', thick: 5 },
@@ -3123,6 +3336,28 @@ function drawPlayer() {
   }
 }
 
+// Łowca: postać z plecakiem odrzutowym zawieszona w powietrzu (f.y – środek tułowia)
+function drawJet(f) {
+  const fy = f.y + 16, x = f.x, fall = f.st === 'jfall';
+  ctx.save();
+  if (fall) { ctx.translate(x, f.y); ctx.rotate(f.ph); ctx.translate(-x, -f.y); }
+  // Plecak i płomienie dysz
+  const bx = x - f.dir * 6;
+  rrect(bx - 3, f.y - 12, 6, 12, 1.5, f.white > 0 ? '#ffffff' : '#3a4a40');
+  rrect(bx - 2, f.y - 11, 4, 3, 1, '#6a8a74');
+  if (!fall) {
+    const fl = 5 + Math.random() * 4;
+    ctx.globalCompositeOperation = 'lighter';
+    poly([[bx - 2, f.y], [bx + 2, f.y], [bx, f.y + fl]], 'rgba(255,160,60,0.9)');
+    poly([[bx - 1, f.y], [bx + 1, f.y], [bx, f.y + fl * 0.6]], 'rgba(255,255,220,0.9)');
+    ctx.globalCompositeOperation = 'source-over';
+    EQ.push({ x: bx, y: f.y + 4, col: '#ffb060', r: 12, a: 0.5, rgb: '255,160,60' });
+  }
+  drawFig(x, fy, f.dir, f.st === 'back' || fall ? POSE.hurt : POSE.aim, STY.jet,
+    { blade: '', ign: 1, trail: false, own: f, gun: fall ? '' : 'blaster', mf: f.mf, white: f.white });
+  ctx.restore();
+}
+
 function drawDrone(f) {
   if (f.st === 'gone') return;
   const x = f.x, y = f.y - (f.lift || 0), t = game.anim, C = c => (f.white > 0 ? '#ffffff' : c);
@@ -3143,9 +3378,10 @@ function drawDrone(f) {
 
 function drawFoe(f) {
   if (f.st === 'gone') return;
+  if (f.k === 'jet') { drawJet(f); return; }
   if (isDrone(f)) { drawDrone(f); return; }
-  const S = STY[f.sty || f.k] || STY[f.k];
-  let a = POSE.stand, blade = '', ign = 1, tr = false, gun = f.k === 'lord' ? '' : f.k, y = f.y - (f.lift || 0), alpha = 1;
+  const S = STY[f.sty || f.k] || STY[f.k] || STY.blaster;
+  let a = POSE.stand, blade = '', ign = 1, tr = false, gun = f.k === 'lord' ? '' : f.k === 'rifle' || f.k === 'sniper' ? 'rifle' : 'blaster', y = f.y - (f.lift || 0), alpha = 1;
   if (f.st === 'pulled' || f.st === 'choke') {
     a = POSE.fall; if (f.k === 'lord') blade = 'hand';
   } else if (f.st === 'knock') {
@@ -3183,6 +3419,7 @@ function drawFoe(f) {
       case 'dodge': a = POSE.jump; y -= Math.sin(Math.PI * Math.min(1, f.t / 0.34)) * 7; break;
       case 'bash': a = f.t < 0.3 ? POSE.bashw : POSE.bash; break;
       case 'thurt': case 'tstun': a = POSE.hurt; break;
+      case 'sblock': a = POSE.block || POSE.aim; break;
       case 'fin':
         // Rozcięta broń wypada z rąk, żołnierz osuwa się na kolana i pada
         gun = '';
@@ -3198,6 +3435,24 @@ function drawFoe(f) {
   drawFig(f.x, y, f.dir, a, S, { blade, ign, bc: RED, trail: tr, own: f, gun, mf: f.mf, white: f.white, dbl: f.dbl, dual: f.dual });
   ctx.globalAlpha = 1;
   if (alpha < 1) for (let i = eq0; i < EQ.length; i++) EQ[i].a *= alpha;
+  if (f.k === 'shield' && !['fin', 'fdead', 'ffall', 'gone'].includes(f.st)) {
+    // Tarcza energetyczno-stalowa przed tułowiem (opuszczona przy ogłuszeniu)
+    const down = !shieldUp(f, f.dir), sx = f.x + f.dir * (down ? 5 : 9), sy = y - (down ? 12 : 30);
+    rrect(sx - 2.5, sy, 5, 20, 1.5, f.white > 0 ? '#ffffff' : '#5a6a84');
+    rrect(sx - 1.5, sy + 1, 3, 18, 1, f.white > 0 ? '#ffffff' : '#a0b4d0');
+    ctx.fillStyle = 'rgba(160,200,255,0.8)'; ctx.fillRect(sx - 0.5, sy + 3, 1, 14);
+    if (!down) EQ.push({ x: sx, y: sy + 10, col: '#a0c8ff', r: 10, a: 0.3, rgb: '160,200,255' });
+  }
+  if (f.k === 'sniper' && f.st === 'aim' && f.alive) {
+    // Czerwona linia lasera celowniczego
+    const lx0 = f.x + f.dir * 14, ly = f.y - 21;
+    let lx1 = lx0;
+    for (let i = 0; i < 60; i++) { lx1 += f.dir * 6; if (lx1 < 0 || lx1 > SW || isWall(f.r, colOf(lx1))) break; if (playerOnRow(f.r) && Math.abs(lx1 - P.x) < 4) break; }
+    ctx.globalCompositeOperation = 'lighter';
+    seg([lx0, ly], [lx1, ly], 0.6, `rgba(255,40,70,${0.4 + 0.4 * Math.sin(game.anim * 30)})`);
+    ctx.globalCompositeOperation = 'source-over';
+    EQ.push({ x: lx1, y: ly, col: '#ff3050', r: 6, a: 0.6, rgb: '255,40,70' });
+  }
   if (f.st === 'sleep') {
     const k = (game.anim * 0.8) % 1;
     txt('z', f.x - 2 + k * 4, f.y - 24 - k * 10, `rgba(220,220,255,${1 - k})`, 'center', 7 + k * 2, true);
@@ -3367,6 +3622,16 @@ function drawDynamic() {
       const lc = on ? '#60ff80' : (Math.floor(game.anim * 3) % 2 ? '#ff4030' : '#802018');
       ctx.fillStyle = lc; ctx.fillRect(kx + 6, fy - 6, 2, 2);
       EQ.push({ x: kx + 7, y: fy - 5, col: lc, r: 8, a: 0.4, rgb: on ? '96,255,128' : '255,64,48' });
+    } else if (ch === 'Y' || ch === 'y') {
+      // Dźwignia w podstawie – czerwona (wyłączona) albo zielona (przestawiona)
+      const on = ch === 'y', lx = x + 16;
+      rrect(lx - 6, fy - 5, 12, 5, 1.5, '#3a3e4a');
+      rrect(lx - 5, fy - 4, 10, 1.5, 0.7, '#5a6070');
+      const ang = on ? 0.6 : -0.6, tx = lx + Math.sin(ang) * 13, ty = fy - 4 - Math.cos(ang) * 13;
+      seg([lx, fy - 4], [tx, ty], 1.6, '#8a90a0');
+      const lc = on ? '#60ff80' : '#ff4030';
+      dot(tx, ty, 2.2, lc);
+      EQ.push({ x: tx, y: ty, col: lc, r: 9, a: 0.45, rgb: on ? '96,255,128' : '255,64,48' });
     } else if (ch === 'E') {
       // Bariera energetyczna (pulsuje cyklicznie)
       const cx = x + 16, top = fy - 30, on = barrierOn(c);
@@ -3402,6 +3667,46 @@ function drawDynamic() {
     const k = 0.6 + Math.sin(game.anim * 20 + q.x) * 0.3;
     ctx.fillStyle = `rgba(120,200,255,${k})`; ctx.fillRect(x0 + 6, fy + 7, 3, 1.2); ctx.fillRect(x0 + w - 9, fy + 7, 3, 1.2);
     EQ.push({ x: q.x, y: fy + 9, col: '#80d0ff', r: 14, a: 0.35, rgb: '110,190,255' });
+  }
+  // Bloki aury – metalowe kontenery z niebieskimi znakami
+  for (const b of BLOCKS) {
+    const x = b.c * TW + b.ox, y0 = floorY(b.r - 1) + b.oy, h = floorY(b.r) - floorY(b.r - 1);
+    rrect(x + 1, y0, TW - 2, h, 2, '#4a505e');
+    rrect(x + 3, y0 + 2, TW - 6, h - 4, 1.5, '#6a7284');
+    ctx.fillStyle = '#3a404c';
+    for (let i = 1; i < 4; i++) ctx.fillRect(x + 3, y0 + i * h / 4, TW - 6, 1);
+    ctx.fillStyle = '#a8b4c8'; ctx.fillRect(x + 1, y0, TW - 2, 1.5);
+    const k = 0.5 + 0.3 * Math.sin(game.anim * 3 + b.c);
+    ctx.fillStyle = `rgba(140,200,255,${k})`;
+    ctx.fillRect(x + 14, y0 + h / 2 - 6, 4, 12); ctx.fillRect(x + 10, y0 + h / 2 - 2, 12, 4);
+    EQ.push({ x: x + 16, y: y0 + h / 2, col: '#80c0ff', r: 12, a: 0.25 * k, rgb: '120,190,255' });
+  }
+  // Droid BIP
+  const B = game.bot;
+  if (B && game.mode === 'play') {
+    const bx = B.x, by = B.y, dir = P.dir;
+    dot(bx, by, 4.5, '#c8ccd4'); dot(bx - 1.2, by - 1.4, 2, '#f0f2f6');
+    ctx.fillStyle = '#7a8090'; ctx.fillRect(bx - 4.5, by + 0.5, 9, 1);
+    seg([bx, by - 4.5], [bx - dir * 2, by - 8], 0.6, '#9aa0b0'); dot(bx - dir * 2, by - 8, 0.9, '#ff6040');
+    const ec = B.ping ? '#ffd040' : '#40e0ff';
+    dot(bx + dir * 2, by - 0.5, 1.4, ec);
+    EQ.push({ x: bx + dir * 2, y: by - 0.5, col: ec, r: 8, a: 0.5, rgb: B.ping ? '255,210,60' : '64,224,255' });
+    if (Math.random() < 0.5) parts.push({ x: bx, y: by + 5, vx: 0, vy: 10, life: 0.2, col: '#60c0ff', e: true, g: 0 });
+    if (B.zap > 0) {
+      // Wyładowanie łukiem do celu
+      ctx.globalCompositeOperation = 'lighter';
+      let px = bx, py = by;
+      for (let i = 1; i <= 6; i++) {
+        const nx = bx + (B.tx - bx) * i / 6 + (i < 6 ? (Math.random() - 0.5) * 8 : 0), ny = by + (B.ty - by) * i / 6 + (i < 6 ? (Math.random() - 0.5) * 8 : 0);
+        seg([px, py], [nx, ny], 1, 'rgba(150,230,255,0.9)'); px = nx; py = ny;
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    if (B.ping && Math.floor(game.anim * 2) % 2) {
+      // Strzałka w stronę kryształu ostrza
+      const a = Math.atan2(B.ping.y - by, B.ping.x - bx), ax = bx + Math.cos(a) * 9, ay = by + Math.sin(a) * 9;
+      poly([[ax + Math.cos(a) * 3, ay + Math.sin(a) * 3], [ax + Math.cos(a + 2.4) * 2.5, ay + Math.sin(a + 2.4) * 2.5], [ax + Math.cos(a - 2.4) * 2.5, ay + Math.sin(a - 2.4) * 2.5]], '#ffd040');
+    }
   }
   // Miny głębinowe na łańcuchach
   for (const m of MINES) {
@@ -3569,10 +3874,10 @@ function drawEmissive() {
   // Strzały
   ctx.globalCompositeOperation = 'lighter';
   for (const b of BOLTS) {
-    const s = Math.sign(b.vx);
-    seg([b.x, b.y], [b.x - s * 8, b.y], 4, 'rgba(255,60,40,0.35)');
-    seg([b.x, b.y], [b.x - s * 7, b.y], 2, 'rgba(255,80,50,0.9)');
-    seg([b.x, b.y], [b.x - s * 6, b.y], 0.8, '#fff0e8');
+    const v = Math.hypot(b.vx, b.vy || 0) || 1, ux = b.vx / v, uy = (b.vy || 0) / v, L = b.big ? 1.6 : 1;
+    seg([b.x, b.y], [b.x - ux * 8 * L, b.y - uy * 8 * L], 4 * L, 'rgba(255,60,40,0.35)');
+    seg([b.x, b.y], [b.x - ux * 7 * L, b.y - uy * 7 * L], 2 * L, 'rgba(255,80,50,0.9)');
+    seg([b.x, b.y], [b.x - ux * 6 * L, b.y - uy * 6 * L], 0.8, '#fff0e8');
   }
   // Iskry i świecące punkty
   for (const q of parts) if (q.e) dot(q.x, q.y, 0.7, q.col);
@@ -3610,6 +3915,15 @@ function hint() {
   if (ch === 'H' || ch === 'M') return 'A – wypij miksturę';
   if (ch === 'T') return 'A – odczytaj terminal';
   if (ch === 'K') return used ? '' : 'A – użyj konsoli';
+  if (ch === 'Y') return 'A – przestaw dźwignię (albo przyciągnij ją aurą z daleka)';
+  if (!p.air && p.st !== 'swim') {
+    const pi = game.slots.indexOf('pull'), qi = game.slots.indexOf('push');
+    const bA = blockAhead(p.dir);
+    if (bA && (qi >= 0 || (pi >= 0 && bA.i >= 2)))
+      return 'Blok aury: ' + (qi >= 0 ? 'ZX'[qi] + ' – pchnij' : '') + (qi >= 0 && pi >= 0 && bA.i >= 2 ? ' · ' : '') + (pi >= 0 && bA.i >= 2 ? 'ZX'[pi] + ' – przyciągnij' : '');
+  }
+  if (p.sword && FOES.some(f => f.alive && !f.aw && f.k !== 'lord' && !isDrone(f) && f.r === p.r && (f.st === 'sleep' || (f.st === 'idle' && Math.sign(f.x - p.x) === f.dir)) && Math.abs(f.x - p.x) < 60))
+    return 'Podkradnij się – A cichy cios od tyłu (nie biegnij!)';
   if (atDoor()) return doorOpen() ? '↑ – wyjdź przez wrota' : 'Pokonaj Lorda, by zgasić pole siłowe';
   if (crateAhead() >= 0) return p.sword ? 'A – rozbij skrzynię' : 'Skrzynię rozetnie tylko ostrze';
   if (!p.sword) return '←→ bieg · ↑ skok · ↓ zwis · Z/X aura (moc działa i bez ostrza)';
@@ -3656,7 +3970,7 @@ function drawHUD() {
   let f = engaged();
   if (!f && game.hud && game.hudT > 0) f = game.hud;
   if (f) {
-    const col = f.k === 'lord' ? '#ff3040' : f.k === 'rifle' ? '#f0a020' : '#80a0f0', sp = f.max > 6 ? 7 : 9;
+    const col = { lord: '#ff3040', rifle: '#f0a020', shield: '#a0c8ff', sniper: '#ff6080', jet: '#60e0a0' }[f.k] || '#80a0f0', sp = f.max > 6 ? 7 : 9;
     for (let i = 0; i < f.max; i++) tri(SW - 11 - i * sp, 187, i < f.hp && f.alive, col, '#302030');
   }
   const s = game.mode === 'gear' ? '' : msg.t > 0 ? msg.text : hint();

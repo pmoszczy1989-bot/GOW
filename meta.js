@@ -57,6 +57,7 @@ function onKill(f) {
   achv('first');
   if (game.cause === 'bolt' || game.cause === 'choke') achv('aura');
   if (game.cause === 'mirror') achv('mirror');
+  if (game.cause === 'stealth' && game.stealth >= 5) achv('shadow');
   if (bladeId('rose')) addCrys(1, f.x, f.y - 30);
   if (f.k === 'lord') lordDown(f);
 }
