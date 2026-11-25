@@ -12,7 +12,11 @@ const SH_FOE = {
   dart: { hp: 3, r: 8, name: 'Grot' },
   bomber: { hp: 6, r: 14, name: 'Taran' },
   rock: { hp: 4, r: 9, name: 'asteroida' },
+  bike: { hp: 3, r: 8, name: 'Zwiadowca' },     // ścigacz wroga (wariant speeder)
+  tree: { hp: 1, r: 6, name: 'pień' },          // niezniszczalna przeszkoda (wariant speeder)
 };
+const SP_V = 130;                       // prędkość przesuwu podłoża w pościgu [px/s]
+const SP_Y0 = 86, SP_Y1 = 170;          // pas jazdy ścigacza (głębia sceny)
 const SH_MAXP = 300;                    // limit cząsteczek
 
 // Deterministyczny „szum” (wygląd planet, kształty skał)
@@ -20,23 +24,31 @@ const shHash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return
 
 // ===== Start poziomu =====
 function startShip() {
-  const cfg = LV.ship || {}, diff = cfg.diff ? 1 : 0;
+  const cfg = LV.ship || {}, diff = cfg.diff ? 1 : 0, sp = !!cfg.speeder;
   SHIP = {
-    diff, from: cfg.from || 'cytadela', to: cfg.to || 'pustynia',
-    D: diff ? 80 : 64,                  // czas lotu do pojawienia się krążownika [s]
-    t: 0, x: 60, y: 90, vx: 0, vy: 0,
+    diff, sp, from: cfg.from || 'cytadela', to: cfg.to || 'pustynia',
+    D: sp ? 60 : diff ? 80 : 64,        // czas lotu do pojawienia się krążownika (lub końca pościgu) [s]
+    t: 0, x: 60, y: sp ? 130 : 90, vx: 0, vy: 0, gx: 0,
     hp: 6, max: 6, inv: 0, roll: 0, rollCd: 0, fireCd: 0, side: 0, torp: 3,
     shots: [], torps: [], bolts: [], foes: [], parts: [], picks: [], junk: [],
-    queue: [], waves: shBuildWaves(diff), wi: 0,
+    queue: [], waves: sp ? shBuildSpeeder(diff) : shBuildWaves(diff), wi: 0,
     boss: null, phase: 'fly', jumpT: 0, done: false,
     dead: false, deadT: 0, kills: 0, sndCd: 0, junkT: 3,
     stars: [],
   };
-  const sp = [6, 16, 38];
+  const spd = [6, 16, 38];
   for (let l = 0; l < 3; l++)
     for (let i = 0; i < 26 + l * 6; i++)
-      SHIP.stars.push({ x: Math.random() * SW, y: Math.random() * 180, l, v: sp[l] * (0.8 + Math.random() * 0.4) });
-  say(LV.name + (diff ? ' – przebij się przez flotę!' : ' – zgub pościg!'), 3);
+      SHIP.stars.push({ x: Math.random() * SW, y: Math.random() * 180, l, v: spd[l] * (0.8 + Math.random() * 0.4) });
+  say(LV.name + (sp ? ' – zgub zwiadowców między drzewami!' : diff ? ' – przebij się przez flotę!' : ' – zgub pościg!'), 3);
+}
+
+// Scenariusz pościgu ścigaczem: zwiadowcy i gęstwina pni
+function shBuildSpeeder(diff) {
+  const W = [], pats = ['trees', 'bike', 'trees', 'bike', 'grove', 'bike', 'trees', 'bike', 'grove', 'bike', 'trees', 'bike'];
+  let t = 2, i = 0;
+  while (t < 60 - 4) { W.push({ t, p: pats[i % pats.length], i }); t += diff ? 3.4 : 4; i++; }
+  return W;
 }
 
 // Scenariusz fal: lista wzorców rozłożonych w czasie
@@ -70,6 +82,17 @@ function shPattern(w) {
   } else if (w.p === 'rock') {
     const n = 3 + d * 2;
     for (let i = 0; i < n; i++) q.push({ at: t + i * 0.7, k: 'rock', y: 15 + Math.random() * 150 });
+  } else if (w.p === 'bike') {
+    const n = 2 + d;
+    for (let i = 0; i < n; i++) q.push({ at: t + i * 0.8, k: 'bike', y: SP_Y0 + 6 + Math.random() * (SP_Y1 - SP_Y0 - 12) });
+  } else if (w.p === 'trees' || w.p === 'grove') {
+    // Pnie w kilku pasach; zawsze zostaje przynajmniej jedna luka
+    const n = w.p === 'grove' ? 7 + d * 2 : 4 + d, lanes = 6, gap = (Math.random() * lanes) | 0;
+    for (let i = 0; i < n; i++) {
+      let l = (Math.random() * lanes) | 0;
+      if (l === gap) l = (l + 1 + ((Math.random() * (lanes - 1)) | 0)) % lanes;
+      q.push({ at: t + i * (w.p === 'grove' ? 0.28 : 0.55), k: 'tree', y: SP_Y0 + 4 + l * (SP_Y1 - SP_Y0 - 8) / (lanes - 1) });
+    }
   }
 }
 
@@ -81,6 +104,8 @@ function shSpawn(k, y, o) {
   if (k === 'eye') f.cd = 1.5 + Math.random() * 2.5;
   if (k === 'dart') { f.tx = 200 + Math.random() * 60; f.cd = 0.9; }
   if (k === 'bomber') { f.cd = 1.8; f.x = SW + 26; }
+  if (k === 'bike') { f.x = -20; f.tx = 190 + Math.random() * 80; f.cd = 0.8; }
+  if (k === 'tree') { f.vx = -SP_V; f.seed = Math.random() * 100; f.x = SW + 12; }
   if (k === 'rock') {
     f.r = 7 + Math.random() * 4; f.vx = -(40 + Math.random() * 35); f.vy = (Math.random() - 0.5) * 16;
     f.vr = (Math.random() - 0.5) * 3; f.seed = Math.random() * 100;
@@ -124,7 +149,7 @@ function shHurt(n) {
     S.dead = true; S.deadT = 0;
     shExplode(S.x, S.y, 16); shExplode(S.x + 6, S.y - 4, 10, true);
     SND.die();
-    say('Statek zniszczony…', 3);
+    say(S.sp ? 'Ścigacz rozbity…' : 'Statek zniszczony…', 3);
   }
   return true;
 }
@@ -185,6 +210,7 @@ function shAimed(x, y, sp) {
 
 // Obrażenia dla części bossa / wroga
 function shDamageFoe(f, n) {
+  if (f.k === 'tree') return;
   f.hp -= n; f.hitT = 0.08;
   if (f.hp <= 0 && !f.gone) {
     f.gone = true; SHIP.kills++;
@@ -216,6 +242,7 @@ function updShip(dt) {
   S.t += dt;
   S.sndCd -= dt;
   const jump = S.phase === 'jump' || S.phase === 'won';
+  if (S.sp && !S.dead) S.gx += SP_V * (jump ? 1 + Math.min(2, S.jumpT * 2) : 1) * dt;
 
   // Gwiazdy i odłamki tła
   const sm = jump ? 1 + Math.min(1, S.jumpT / 0.6) * 40 : 1;
@@ -267,7 +294,7 @@ function updShip(dt) {
   S.x += S.vx * dt; S.y += S.vy * dt;
   const xMax = S.boss ? Math.min(280, S.boss.x - 6) : 296;
   S.x = Math.max(14, Math.min(xMax, S.x));
-  S.y = Math.max(8, Math.min(172, S.y));
+  S.y = S.sp ? Math.max(SP_Y0, Math.min(SP_Y1, S.y)) : Math.max(8, Math.min(172, S.y));
   if (S.inv > 0) S.inv -= dt;
   if (S.roll > 0) S.roll = Math.max(0, S.roll - dt);
   if (S.rollCd > 0) S.rollCd -= dt;
@@ -278,7 +305,7 @@ function updShip(dt) {
   if (K.act && S.fireCd <= 0) {
     S.fireCd = 0.125;
     S.side ^= 1;
-    const oy = S.side ? -5.5 : 5.5;
+    const oy = S.sp ? (S.side ? -1 : 1) : S.side ? -5.5 : 5.5;
     S.shots.push({ x: S.x + 6, y: S.y + oy, vx: 320 });
     shPart({ k: 'spark', x: S.x + 8, y: S.y + oy, vx: 30, vy: 0, t: 0, life: 0.06, rgb: game.blade.rgb });
     tone(1900, 0.05, 'square', 0.012, 900);
@@ -298,7 +325,12 @@ function updShip(dt) {
     const q = S.queue[i];
     if (q.at <= S.t) { S.queue.splice(i, 1); shSpawn(q.k, q.y, q.ph !== undefined ? { ph: q.ph } : null); }
   }
-  if (S.phase === 'fly' && S.t >= S.D && (S.foes.length === 0 || S.t >= S.D + 6) && !S.queue.length) shStartBoss();
+  if (S.phase === 'fly' && S.t >= S.D && (S.foes.length === 0 || S.t >= S.D + 6) && !S.queue.length) {
+    if (S.sp) {
+      // Koniec pościgu – ścigacz wyrywa do przodu
+      if (!S.foes.some(f => f.k === 'bike')) { S.phase = 'jump'; S.jumpT = 0; S.foes = []; SND.win(); say('Pościg zgubiony!', 2); return; }
+    } else shStartBoss();
+  }
 
   shUpdFoes(dt, false);
   if (S.boss) shUpdBoss(dt);
@@ -310,6 +342,7 @@ function updShip(dt) {
     for (const f of S.foes) {
       if (f.gone) continue;
       if (Math.abs(f.x - s.x) < f.r + 3 && Math.abs(f.y - s.y) < f.r) {
+        if (f.k === 'tree') { s.dead = true; shSparks(s.x, s.y, 3, '255,200,120', 30); break; }
         shDamageFoe(f, 1); s.dead = true;
         shSparks(s.x, s.y, 2, game.blade.rgb, 40);
         break;
@@ -353,9 +386,9 @@ function updShip(dt) {
 
   // Zderzenia z wrogami
   for (const f of S.foes) {
-    if (f.gone) continue;
+    if (f.gone || (f.k === 'bike' && f.st === 'in')) continue;
     if (Math.abs(f.x - S.x) < f.r + 8 && Math.abs(f.y - S.y) < f.r + 3) {
-      if (shHurt(1)) shDamageFoe(f, 3);
+      if (shHurt(1)) { shDamageFoe(f, 3); if (f.k === 'tree') { shSparks(S.x + 8, S.y, 10, '200,160,100', 70); S.vx = -80; } }
       if (S.dead) return;
     }
   }
@@ -376,7 +409,7 @@ function shTorpTarget(o) {
   const S = SHIP;
   let best = null, bd = 1e9;
   for (const f of S.foes) {
-    if (f.gone || f.x > SW + 5) continue;
+    if (f.gone || f.k === 'tree' || f.x > SW + 5) continue;
     const d = Math.hypot(f.x - o.x, f.y - o.y) + (f.x < o.x ? 120 : 0);
     if (d < bd) { bd = d; best = [f.x, f.y]; }
   }
@@ -460,6 +493,27 @@ function shUpdFoes(dt, idle) {
     } else if (f.k === 'rock') {
       f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt;
       if (f.y < 8 || f.y > 172) f.vy = -f.vy;
+    } else if (f.k === 'tree') {
+      if (!(S.phase === 'jump' || S.phase === 'won')) f.x += f.vx * dt;
+    } else if (f.k === 'bike') {
+      // Zwiadowca: wyprzedza, zrównuje pas z graczem i strzela do tyłu; omija pnie (nie zawsze skutecznie)
+      const tree = S.foes.find(o => o.k === 'tree' && !o.gone && o.x > f.x - 4 && o.x - f.x < 34 && Math.abs(o.y - f.y) < 10);
+      if (f.st === 'in') {
+        f.x = lerp(f.x, f.tx, Math.min(1, dt * 1.4));
+        if (f.tx - f.x < 4) { f.st = 'aim'; f.cd = 0.6; }
+      } else if (f.st === 'aim') {
+        f.y = lerp(f.y, idle ? f.y : S.y, Math.min(1, dt * (1.3 + d * 0.5)));
+        if (f.cd <= 0 && !idle) {
+          f.cd = 1.1; f.shots++;
+          shBolt(f.x - 10, f.y - 2, -150, 0);
+          tone(820, 0.07, 'square', 0.015, 300);
+          if (f.shots >= 3 + d) { f.st = 'go'; f.vx = 20; }
+        }
+      } else { f.vx += 200 * dt; f.x += f.vx * dt; if (f.x > SW + 30) f.gone = true; }
+      if (tree && Math.random() < 0.9) f.y += (f.y < tree.y ? -1 : 1) * 70 * dt;
+      f.y = Math.max(SP_Y0, Math.min(SP_Y1, f.y));
+      for (const o of S.foes)
+        if (o.k === 'tree' && Math.abs(o.x - f.x) < 9 && Math.abs(o.y - f.y) < 5) { shDamageFoe(f, 99); shSparks(f.x, f.y, 8, '200,160,100', 60); break; }
     }
     if (f.x < -30) f.gone = true;
   }
@@ -684,8 +738,89 @@ function shDrawSzpon(x, y, sy, roll) {
   ctx.restore();
 }
 
+// ===== Pościg ścigaczem (LV.ship.speeder) – las Verdan =====
+function shDrawSpeederBG() {
+  const S = SHIP, gx = S.gx;
+  // Półmrok pod koronami
+  let g = ctx.createLinearGradient(0, 0, 0, 80);
+  g.addColorStop(0, '#0c1a10'); g.addColorStop(1, '#2a4028');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, SW, 80);
+  // Smugi światła przez liście
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 5; i++) {
+    const x = ((i * 97 - gx * 0.15) % 420 + 420) % 420 - 50;
+    ctx.fillStyle = 'rgba(200,255,170,0.05)';
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 18, 0); ctx.lineTo(x + 60, 180); ctx.lineTo(x + 30, 180); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  // Dalekie pnie (2 warstwy paralaksy)
+  for (let l = 0; l < 2; l++) {
+    const k = l ? 0.55 : 0.25, w = l ? 9 : 5, col = l ? '#1c2a1a' : '#16221a', base = l ? 84 : 78;
+    for (let i = 0; i < 9; i++) {
+      const x = ((i * 53 + l * 29 + shHash(i + l * 10) * 30 - gx * k) % 480 + 480) % 480 - 60;
+      ctx.fillStyle = col; ctx.fillRect(x - w / 2, 0, w, base);
+    }
+  }
+  // Podszyt i ściółka
+  g = ctx.createLinearGradient(0, 76, 0, 180);
+  g.addColorStop(0, '#2a3a20'); g.addColorStop(1, '#3e4a26');
+  ctx.fillStyle = g; ctx.fillRect(0, 76, SW, 104);
+  for (let i = 0; i < 14; i++) {
+    const x = ((i * 37 - gx * 0.7) % 520 + 520) % 520 - 40;
+    ctx.fillStyle = 'rgba(30,60,24,0.8)';
+    ctx.beginPath(); ctx.ellipse(x, 79, 14 + shHash(i) * 10, 5, 0, Math.PI, 0); ctx.fill();
+  }
+  // Smugi ruchu na podłożu (bliżej = szybciej)
+  for (let i = 0; i < 26; i++) {
+    const y = SP_Y0 - 2 + (i * 37 % 90), k = 0.7 + (y - SP_Y0) / 90 * 0.6;
+    const x = ((shHash(i) * 600 - gx * k) % 360 + 360) % 360 - 20;
+    seg([x, y], [x + 8 + k * 6, y], 0.6, 'rgba(90,110,60,0.6)');
+    if (i % 3 === 0) dot(x + 3, y - 1, 1.2, 'rgba(60,90,40,0.8)');
+  }
+}
+
+// Ścigacz (bok, dziób w prawo); y = pas na podłożu
+function shDrawBike(x, y, hop, enemy, hit) {
+  const fl = 0.7 + Math.random() * 0.3, by = y - 7 - hop;
+  ctx.fillStyle = `rgba(0,0,0,${0.35 - hop * 0.015})`;
+  ctx.beginPath(); ctx.ellipse(x, y + 1, 13 - hop * 0.3, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+  const rgb = enemy ? '255,120,60' : game.blade.rgb;
+  ctx.globalCompositeOperation = 'lighter';
+  glow(x - 12, by + 1, 7 * fl, rgb, 0.45);
+  seg([x - 11, by + 1], [x - 15 - fl * 4, by + 1], 1.4, `rgba(${rgb},0.8)`);
+  ctx.globalCompositeOperation = 'source-over';
+  const c1 = hit ? '#ffffff' : enemy ? '#5a5e6a' : '#c8ccd6', c2 = hit ? '#ffffff' : enemy ? '#3a3c46' : '#8a8e9c';
+  // Długi wysięgnik z łopatkami sterowymi
+  seg([x + 2, by], [x + 15, by - 1], 1.4, c2);
+  poly([[x + 12, by - 4], [x + 15, by - 4], [x + 16, by + 2], [x + 13, by + 2]], c1);
+  // Kadłub i silnik
+  poly([[x - 12, by - 2], [x + 3, by - 3], [x + 6, by], [x + 3, by + 3], [x - 12, by + 3]], c1);
+  poly([[x - 12, by + 0.5], [x + 6, by], [x + 3, by + 3], [x - 12, by + 3]], c2);
+  rrect(x - 13, by - 1, 5, 4, 1, enemy ? '#2a2c34' : '#5a5e6c');
+  // Kierowca
+  const sk = enemy ? '#2a2830' : '#d8d0c0', hel = enemy ? '#e8e8ec' : '#4a4058';
+  seg([x - 4, by - 3], [x - 1, by - 9], 3, sk);
+  dot(x, by - 11, 2.4, hel);
+  if (enemy) seg([x - 1, by - 11], [x + 2, by - 11], 0.9, '#20242c');
+  seg([x - 1, by - 8], [x + 4, by - 4], 1.2, sk);
+  seg([x - 4, by - 2], [x - 1, by + 1], 1.4, sk);
+  if (enemy) dot(x + 6, by, 0.8, '#ff5040');
+}
+
 function shDrawFoe(f) {
   const x = f.x, y = f.y, hit = f.hitT > 0;
+  if (f.k === 'bike') { shDrawBike(x, y, 0, true, hit); return; }
+  if (f.k === 'tree') {
+    // Ogromny pień sięgający poza kadr; korzenie u podstawy
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(x, y + 1, 12, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    poly([[x - 11, y + 1], [x - 5, y - 8], [x + 5, y - 8], [x + 11, y + 1]], '#3a2a1c');
+    ctx.fillStyle = '#4e3824'; ctx.fillRect(x - 5, -2, 10, y - 4);
+    ctx.fillStyle = '#5e4630'; ctx.fillRect(x - 5, -2, 3, y - 4);
+    ctx.fillStyle = '#2e2014'; ctx.fillRect(x + 2.5, -2, 2.5, y - 4);
+    for (let i = 0; i < 6; i++) seg([x - 3 + shHash(f.seed + i) * 6, y - 10 - i * 14], [x - 2 + shHash(f.seed + i + 9) * 5, y - 18 - i * 14], 0.6, '#2a1c10');
+    return;
+  }
   if (f.k === 'eye') {
     // Sowa – kula kokpitu przed wysokim sześciokątnym panelem
     const pc = hit ? '#ffffff' : '#3c4252';
@@ -824,7 +959,7 @@ function drawShip() {
   ctx.save();
   ctx.beginPath(); ctx.rect(0, 0, SW, 180); ctx.clip();
   if (game.shake > 0.3) ctx.translate((Math.random() - 0.5) * game.shake * 2, (Math.random() - 0.5) * game.shake * 2);
-  shDrawBG();
+  if (S.sp) shDrawSpeederBG(); else shDrawBG();
   if (S.boss) shDrawBoss(S.boss);
   shDrawParts(true);
   // Naprawy
@@ -836,7 +971,18 @@ function drawShip() {
     seg([p.x - 2.8, p.y], [p.x + 2.8, p.y], 1.8, '#20c050');
     seg([p.x, p.y - 2.8], [p.x, p.y + 2.8], 1.8, '#20c050');
   }
-  for (const f of S.foes) shDrawFoe(f);
+  if (S.sp) {
+    // Głębia: rysujemy od dalszych (mniejsze y) do bliższych
+    const L = S.foes.slice();
+    if (!S.dead && S.x < SW + 30) L.push({ me: true, y: S.y });
+    L.sort((a, b) => a.y - b.y);
+    for (const f of L) {
+      if (!f.me) { shDrawFoe(f); continue; }
+      const blink = S.inv > 0 && Math.floor(S.inv * 14) % 2 === 0;
+      const hop = S.roll > 0 ? Math.sin((1 - S.roll / 0.45) * Math.PI) * 10 : 0;
+      if (!blink) shDrawBike(S.x, S.y, hop, false, false);
+    }
+  } else for (const f of S.foes) shDrawFoe(f);
   // Torpedy
   for (const o of S.torps) {
     const cx = Math.cos(o.a), cy = Math.sin(o.a);
@@ -846,13 +992,15 @@ function drawShip() {
     ctx.globalCompositeOperation = 'source-over';
   }
   // Statek gracza
-  if (!S.dead && S.x < SW + 30) {
+  if (!S.sp && !S.dead && S.x < SW + 30) {
     const blink = S.inv > 0 && Math.floor(S.inv * 14) % 2 === 0;
     const sy = S.roll > 0 ? Math.cos((1 - S.roll / 0.45) * Math.PI * 2) : 1;
     if (!blink) shDrawSzpon(S.x, S.y + S.vy * 0.01, Math.abs(sy) < 0.12 ? 0.12 * Math.sign(sy || 1) : sy, S.roll > 0);
   }
   // Światła: lasery, strzały wrogów, eksplozje
   ctx.globalCompositeOperation = 'lighter';
+  const ly = S.sp ? -7 : 0;                 // w pościgu pociski lecą na wysokości ścigaczy
+  ctx.translate(0, ly);
   for (const s of S.shots) {
     glow(s.x, s.y, 7, game.blade.rgb, 0.35);
     seg([s.x, s.y], [s.x - 9, s.y], 2.4, `rgba(${game.blade.rgb},0.85)`);
@@ -864,13 +1012,14 @@ function drawShip() {
     seg([b.x, b.y], [b.x - ux, b.y - uy], 2.6, `rgba(${RED.rgb},0.9)`);
     seg([b.x, b.y], [b.x - ux * 0.7, b.y - uy * 0.7], 0.9, '#fff0e8');
   }
+  ctx.translate(0, -ly);
   shDrawParts(false);
   ctx.globalCompositeOperation = 'source-over';
   ctx.restore();
 
   if (S.dead && S.deadT > 1) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 70, SW, 34);
-    txt('STATEK ZNISZCZONY', SW / 2, 80, '#e04030', 'center', 11);
+    txt(S.sp ? 'ŚCIGACZ ROZBITY' : 'STATEK ZNISZCZONY', SW / 2, 80, '#e04030', 'center', 11);
     txt('R / A – powtórz lot', SW / 2, 94, '#e0d0b0');
   }
   shDrawHUD();
@@ -913,7 +1062,8 @@ function shDrawHUD() {
 function shipHint() {
   const S = SHIP;
   if (!S) return '';
-  if (S.dead) return 'R lub A – powtórz lot';
+  if (S.dead) return 'R lub A – powtórz ' + (S.sp ? 'pościg' : 'lot');
+  if (S.sp) return '←↑↓→ ster · A działko · Z rakieta (' + S.torp + ') · X skok';
   if (S.phase === 'jump' || S.phase === 'won') return '';
   if (S.boss && !S.boss.dead) return shTurAlive(S.boss) ? 'Zestrzel wieżyczki · Z torpeda (' + S.torp + ') · X beczka' : 'Strzelaj w rdzeń reaktora!';
   return '←↑↓→ lot · A lasery · Z torpeda (' + S.torp + ') · X beczka';

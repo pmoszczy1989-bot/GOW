@@ -52,7 +52,7 @@ wyjście za krawędź ekranu przenosi do sąsiedniej. Definicje w `levels.js` (`
 - **Przelot**: Przełęcz Mgławicy.
 - **Rozdział IV – Krio (lodowa planeta)**: Lodowe pustkowia, Jaskinie lodowe, Kriogeniczna forteca, Lodowy most,
   Tron Królowej Mrozu (śliski lód, żołnierze w bieli).
-- **Przelot**: Pas lodowych asteroid.
+- **Pościg**: Pościg w lasach Verdan (ścigacz między pniami, zwiadowcy na ścigaczach strzelają do tyłu, X = skok).
 - **Rozdział V – Verdan (planeta-las)**: Korony drzew, Wioska na palach, Świątynia w pniu, Bagna Verdanu,
   Gniazdo Łowcy (grzyby-trampoliny, zwiadowcy, bagna).
 - **Przelot**: Szturm na flotę Arcylorda.
@@ -84,7 +84,9 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
 - **Zagadki aury**: blok `X` przesuwasz odepchnięciem (pchnij) i przyciągnięciem (do siebie); wepchnięty w szczelinę
   tworzy most, postawiony na płycie `P` trzyma kratę otwartą. Dźwignię `Y` przestawisz klawiszem A albo przyciągnięciem z daleka.
 - **Droid BIP** (od rozdziału II) leci za tobą, co kilka sekund razi pobliskiego wroga i wskazuje ukryty kryształ ostrza w komnacie.
-- Lord (10 trafień) paruje, odskakuje i wpada w furię przy 5 życiach.
+- Lord (10 trafień) paruje i odskakuje. **Fazy**: od 7 żyć rzuca wirującym ostrzem, które wraca do ręki
+  (kucnij, żeby uniknąć; zasłona/cios odbija je w Lorda: −2), przy 5 wpada w furię i wzywa 2 drony,
+  od 3 sypie się strop – cień na podłodze ostrzega przed spadającym głazem.
 - **Zwarcie ostrzy** (tylko Lordowie): gdy zasłonisz się przed ciosem, Lord sparuje twój cios albo sam naciera,
   ostrza mogą się sczepić. Świat prawie staje, a nad sceną pojawia się sekwencja klawiszy:
   **A** cięcie, **↑** nacisk, **Z**/**X** moc ze slotu. Każdy klawisz trzeba wcisnąć w krótkim oknie

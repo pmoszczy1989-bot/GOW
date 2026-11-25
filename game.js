@@ -2215,13 +2215,52 @@ function updTrooper(f, dt) {
   }
 }
 
+// Faza 3 walki z Lordem: ze stropu spadają odłamki – najpierw cień ostrzegawczy, potem uderzenie
+function updRubble(f, dt) {
+  if (!f.alive || f.st === 'fin' || f.st === 'fdead') { f.rub = []; return; }
+  f.rubT -= dt;
+  if (f.rubT <= 0 && playerOnRow(f.r) && P.st !== 'dead') {
+    f.rubT = Math.max(1.6, 2.6 - 0.15 * f.lv);
+    f.rub.push({ x: Math.max(12, Math.min(SW - 12, P.x)), t: 0 });
+    f.rub.push({ x: 16 + Math.random() * (SW - 32), t: -0.3 });
+    SND.rattle();
+  }
+  const top = f.r * RH + 4, fy = floorY(f.r);
+  for (const q of f.rub) {
+    q.t += dt;
+    if (q.t > 0.85 && !q.done) {
+      const k = Math.min(1, (q.t - 0.85) / 0.22);
+      q.y = top + (fy - top) * k * k;
+      if (k >= 1) {
+        q.done = true; SND.crash(); shake(2);
+        burst(q.x, fy, 12, '#8a8a9a', 80, 50);
+        if (playerOnRow(f.r) && !P.air && Math.abs(P.x - q.x) < 13 && P.st !== 'dead' && P.inv <= 0) hurtPlayer(1, Math.sign(P.x - q.x) || 1, 'gruz');
+      }
+    }
+  }
+  f.rub = f.rub.filter(q => !q.done);
+}
+
 function updLord(f, dt) {
   const dx = P.x - f.x, d = Math.abs(dx);
   const same = playerOnRow(f.r);
   if (!f.fury && f.hp <= 5 && f.st !== 'meditate' && f.st !== 'rise') {
-    f.fury = true; say(lordName(f) + ' wpada w furię!', 2.5); SND.lord(); shake(3);
+    f.fury = true; say(lordName(f) + ' wpada w furię i wzywa drony!', 2.5); SND.lord(); shake(3);
     sparks(f.x, f.y - 26, RED.col, 20);
+    // Faza 2: Lord wzywa dwa drony
+    for (const s of [-1, 1]) {
+      const c = Math.max(1, Math.min(8, colOf(f.x) + s * 3)), o = mkFoe({ k: 'drone', r: f.r, c, dir: -s });
+      o.aw = true; o.st = 'chase'; FOES.push(o);
+      burst(o.x, o.y, 10, '#ff6040', 60, 30, true);
+    }
   }
+  // Faza 1 (≤ 7): rzut ostrzem; faza 3 (≤ 3): strop zaczyna się walić
+  if (!f.p1 && f.hp <= 7) { f.p1 = true; say(lordName(f) + ' sięga po rzut ostrzem – kucnij albo odbij je zasłoną!', 2.5); }
+  if (!f.p3 && f.hp <= 3 && f.st !== 'lock') {
+    f.p3 = true; f.rub = []; f.rubT = 1.2; shake(4); SND.crash();
+    say('Strop sali zaczyna się walić! Uważaj na cienie pod gruzem.', 2.5);
+  }
+  if (f.p3) updRubble(f, dt);
   const sp = (f.fury ? 1.3 : 1) * (1 + 0.1 * f.lv);
   switch (f.st) {
     case 'meditate':
@@ -2244,6 +2283,7 @@ function updLord(f, dt) {
         if (d < 30 && Math.random() < 0.3) { f.st = 'hop'; f.t = 0; SND.swing(); }   // odskok i wypad
         else if (d < 40 && Math.random() < 0.18 && FIGHTST.includes(P.st) && startLock(f)) break;   // Lord naciera i sczepia ostrza
         else if (d < 46) { f.st = 'wind'; f.t = 0; }
+        else if (f.p1 && d > 70 && d < 230 && Math.random() < 0.45 && !BOLTS.some(b => b.lb)) { f.st = 'lthrow'; f.t = 0; f.hit = false; }   // rzut ostrzem
         else if (d < 110 && Math.random() < 0.5) { f.st = 'lunge'; f.t = 0; SND.swing(); }
         else f.cd = 0.3;
       }
@@ -2261,6 +2301,15 @@ function updLord(f, dt) {
       if (f.t > 0.24 || d < 26) { f.st = 'gstrike'; f.t = 0; f.hit = false; SND.swing(); }
       break;
     case 'wind': if (f.t > (f.fury ? 0.24 : 0.32)) { f.st = 'gstrike'; f.t = 0; f.hit = false; SND.swing(); } break;
+    case 'lthrow': {
+      // Rzut czerwonym ostrzem jak bumerangiem – bez ostrza Lord jest odsłonięty, dopóki nie wróci
+      if (!f.hit && f.t > 0.3) {
+        f.hit = true; SND.swing(); SND.ignite();
+        BOLTS.push({ x: f.x + f.dir * 12, y: f.y - 22, r: f.r, vx: f.dir * (200 + 20 * f.lv), o: 'e', src: f, lb: true, lt: 0 });
+      }
+      if (f.hit && (f.t > 3 || !BOLTS.some(b => b.lb && b.src === f))) { f.st = 'guard'; f.t = 0; f.cd = 0.5; }
+      break;
+    }
     case 'gstrike':
       if (!f.hit && f.t > 0.07) {
         f.hit = true;
@@ -2293,6 +2342,18 @@ function playerHeight() {
 function updBolts(dt) {
   for (const b of BOLTS) {
     const px = b.x;
+    if (b.lb) {
+      // Ostrze Lorda: po chwili (albo przy murze / krawędzi) zawraca do właściciela
+      b.lt += dt;
+      const nx = b.x + b.vx * dt, c2 = colOf(nx);
+      if (!b.src.alive) { b.dead = true; continue; }
+      if (!b.back && b.o === 'e' && (b.lt > 0.85 || nx < 6 || nx > SW - 6 || isWall(b.r, c2))) { b.back = true; b.vx = -b.vx; }
+      if (b.back && b.o === 'e') {
+        b.vx = Math.sign(b.src.x - b.x) * Math.abs(b.vx); b.y += ((b.src.y - 22) - b.y) * Math.min(1, dt * 4);
+        if (Math.abs(b.src.x - b.x) < 10) { b.dead = true; SND.ignite(); continue; }
+      }
+      if (b.x < -10 || b.x > SW + 10) { b.dead = true; continue; }
+    }
     b.x += b.vx * dt;
     if (b.vy) {
       // Strzał ukośny (łowca): leci przez rzędy, gaśnie na podłodze
@@ -2311,6 +2372,7 @@ function updBolts(dt) {
     const c = colOf(b.x);
     if (b.x < -10 || b.x > SW + 10) { b.dead = true; continue; }
     if (isWall(b.r, c) || ((gateBlocks(b.r, c) || barBlocks(b.r, c)) && lo <= c * TW + 16 && hi >= c * TW + 16)) {
+      if (b.lb && !b.back) { b.back = true; b.vx = -b.vx; b.x = px; continue; }
       b.dead = true; burst(b.x, b.y, 5, '#ff6040', 60, 40, true); continue;
     }
     if (b.o === 'e') {
@@ -2322,7 +2384,14 @@ function updBolts(dt) {
         if (!f.alive || f.air || f.x < lo - 5 || f.x > hi + 5) continue;
         if (isDrone(f) ? Math.abs(f.y - b.y) > 10 : f.r !== b.r) continue;
         b.dead = true;
-        if (f.k === 'lord') { SND.deflect(); sparks(b.x, b.y, RED.col, 8); }   // Lord odbija strzały ostrzem
+        if (b.lb && f === b.src) {
+          // Odbite ostrze trafia bezbronnego Lorda
+          SND.clash(); shake(3); sparks(b.x, b.y, RED.col, 14);
+          if (!hitFoe(f, 2, Math.sign(b.vx)) && f.alive) { f.st = 'stun'; f.t = 0; }
+          if (f.st === 'fin') startFinisher(f);
+          say('Jego własne ostrze! −2', 1.6);
+        }
+        else if (f.k === 'lord') { SND.deflect(); sparks(b.x, b.y, RED.col, 8); }   // Lord odbija strzały ostrzem
         else if (shieldUp(f, -Math.sign(b.vx))) { SND.deflect(); sparks(b.x, b.y, '#a0c8ff', 8); }   // tarcza łapie strzał
         else { game.cause = 'mirror'; hitFoe(f, 1, Math.sign(b.vx)); game.cause = ''; }
         break;
@@ -2337,16 +2406,28 @@ function boltHitsPlayer(b) {
   const armed = P.sword && facing && !P.thr;
   if (P.sh > 0) {
     // Tarcza aury: łapie strzał, od poziomu 3 odbija go do strzelca
-    if (skl('shield') >= 3) { b.vx = -b.vx * 1.1; b.vy = -(b.vy || 0); b.o = 'p'; b.x += Math.sign(b.vx) * 6; }
+    if (skl('shield') >= 3) { b.vx = -b.vx * 1.1; b.vy = -(b.vy || 0); b.o = 'p'; b.back = true; b.x += Math.sign(b.vx) * 6; }
     else b.dead = true;
     SND.deflect(); burst(b.x, b.y, 8, '#80c0ff', 80, 50, true);
     return;
   }
   if (armed && (P.st === 'block' || P.st === 'strike' || P.st === 'fin' || P.as > 0)) {
     // Cios lub zasłona odbija strzał prosto w strzelca
-    b.vx = -b.vx * 1.15; b.vy = -(b.vy || 0); b.o = 'p';
+    b.vx = -b.vx * 1.15; b.vy = -(b.vy || 0); b.o = 'p'; b.back = true;
     SND.deflect(); shake(1);
     sparks(b.x, b.y, game.blade.col, 8);
+    return;
+  }
+  if (b.lb) {
+    // Ostrze Lorda nie znika – po kontakcie wraca do właściciela
+    if (b.hitP) return;
+    b.hitP = true; b.back = true;
+    if (P.inv > 0) return;
+    if (armed && ['stand', 'fight', 'fstep', 'turn', 'run', 'step', 'land'].includes(P.st) && Math.random() < 0.5) {
+      SND.clash(); sparks(b.x, b.y, game.blade.col, 6); return;
+    }
+    burst(b.x, b.y, 6, '#ff6040', 60, 40, true);
+    hurtPlayer(1, Math.sign(b.vx), 'ostrze');
     return;
   }
   b.dead = true;
@@ -3397,6 +3478,7 @@ function drawFoe(f) {
       case 'lunge': a = POSE.lunge; tr = true; break;
       case 'gstrike': a = f.t < 0.08 ? lerpPose(POSE.windup, POSE.strike, ease(f.t / 0.08)) : POSE.strike; tr = f.t < 0.14; break;
       case 'gblock': a = POSE.block; break;
+      case 'lthrow': a = f.t < 0.3 ? lerpPose(POSE.fight, POSE.windup, f.t / 0.3) : POSE.strike; break;
       case 'lock': a = POSE.lock.slice(); { const j = Math.cos(game.anim * 33) * 0.6; a[16] += j; a[22] += j; } break;
       case 'ghurt': case 'stun': a = POSE.hurt; break;
       case 'fin':
@@ -3430,6 +3512,7 @@ function drawFoe(f) {
       case 'fdead': a = POSE.dead; gun = ''; break;
     }
   }
+  if (f.k === 'lord' && BOLTS.some(b => b.lb && b.src === f)) blade = '';   // ostrze w locie
   const eq0 = EQ.length;
   ctx.globalAlpha = alpha;
   drawFig(f.x, y, f.dir, a, S, { blade, ign, bc: RED, trail: tr, own: f, gun, mf: f.mf, white: f.white, dbl: f.dbl, dual: f.dual });
@@ -3681,6 +3764,20 @@ function drawDynamic() {
     ctx.fillRect(x + 14, y0 + h / 2 - 6, 4, 12); ctx.fillRect(x + 10, y0 + h / 2 - 2, 12, 4);
     EQ.push({ x: x + 16, y: y0 + h / 2, col: '#80c0ff', r: 12, a: 0.25 * k, rgb: '120,190,255' });
   }
+  // Odłamki stropu (faza 3 Lorda): cień na podłodze i spadający głaz
+  for (const f of FOES) {
+    if (f.k !== 'lord' || !f.rub) continue;
+    const fy = floorY(f.r);
+    for (const q of f.rub) {
+      if (q.t < 0) continue;
+      const k = Math.min(1, q.t / 0.85);
+      ctx.fillStyle = `rgba(0,0,0,${0.15 + 0.35 * k})`;
+      ctx.beginPath(); ctx.ellipse(q.x, fy + 1, 4 + 8 * k, 2 + 1.5 * k, 0, 0, Math.PI * 2); ctx.fill();
+      if (Math.sin(game.anim * 30) > 0) { ctx.fillStyle = 'rgba(255,80,60,0.5)'; ctx.fillRect(q.x - 1, fy - 2, 2, 2); }
+      const y = q.y != null ? q.y : f.r * RH + 4 + Math.sin(q.t * 40) * 0.6;
+      rrect(q.x - 7, y - 10, 14, 10, 3, '#6a6470'); rrect(q.x - 5, y - 9, 8, 4, 2, '#8a8490');
+    }
+  }
   // Droid BIP
   const B = game.bot;
   if (B && game.mode === 'play') {
@@ -3874,6 +3971,15 @@ function drawEmissive() {
   // Strzały
   ctx.globalCompositeOperation = 'lighter';
   for (const b of BOLTS) {
+    if (b.lb) {
+      // Wirujące czerwone ostrze Lorda
+      const a = game.anim * 26, ux = Math.cos(a) * 11, uy = Math.sin(a) * 11;
+      seg([b.x - ux, b.y - uy], [b.x + ux, b.y + uy], 6, `rgba(${RED.rgb},0.3)`);
+      seg([b.x - ux, b.y - uy], [b.x + ux, b.y + uy], 2.6, `rgba(${RED.rgb},0.9)`);
+      seg([b.x - ux, b.y - uy], [b.x + ux, b.y + uy], 1, '#ffffff');
+      EQ.push({ x: b.x, y: b.y, col: RED.col, r: 16, a: 0.5, rgb: RED.rgb });
+      continue;
+    }
     const v = Math.hypot(b.vx, b.vy || 0) || 1, ux = b.vx / v, uy = (b.vy || 0) / v, L = b.big ? 1.6 : 1;
     seg([b.x, b.y], [b.x - ux * 8 * L, b.y - uy * 8 * L], 4 * L, 'rgba(255,60,40,0.35)');
     seg([b.x, b.y], [b.x - ux * 7 * L, b.y - uy * 7 * L], 2 * L, 'rgba(255,80,50,0.9)');
@@ -4033,10 +4139,10 @@ function draw() {
       txt(n.chapter, SW / 2, 74, `rgba(240,192,64,${k})`, 'center', 12);
       txt('Poziom ' + (lvl + 2) + ' – ' + n.name, SW / 2, 98, `rgba(232,216,176,${k})`, 'center', 9);
     } else {
-      txt(n.ship ? 'PRZELOT' : 'POZIOM ' + (lvl + 2), SW / 2, 84, `rgba(240,192,64,${k})`, 'center', 14);
+      txt(n.ship ? (n.ship.speeder ? 'POŚCIG' : 'PRZELOT') : 'POZIOM ' + (lvl + 2), SW / 2, 84, `rgba(240,192,64,${k})`, 'center', 14);
       txt(n.name, SW / 2, 104, `rgba(232,216,176,${k})`, 'center', 9);
     }
-    if (n.ship) txt('←→↑↓ ster · A działa · Z/X manewr', SW / 2, 124, `rgba(160,170,200,${k})`, 'center', 7);
+    if (n.ship) txt(n.ship.speeder ? '←→↑↓ ster · A działko · Z rakieta · X skok' : '←→↑↓ ster · A działa · Z/X manewr', SW / 2, 124, `rgba(160,170,200,${k})`, 'center', 7);
     drawToast();
     drawText();
     return;

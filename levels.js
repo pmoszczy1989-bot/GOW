@@ -17,7 +17,7 @@
 //   (125 – zalany dolny rząd, -100 – cała komnata pod wodą).
 // Poziom: name, theme (0–11: 9 Krio, 10 Verdan, 11 Ignis), sky (rząd 0 pod gołym niebem), drop (start – spadanie z nieba), dropMsg,
 //   lock (drzwi zamknięte, dopóki Lord żyje), chapter (tytuł rozdziału na ekranie przejścia),
-//   start: { room, r, c, dir }, ship: { diff, from, to } – poziom lotu statkiem (ship.js).
+//   start: { room, r, c, dir }, ship: { diff, from, to, speeder? } – poziom lotu statkiem (ship.js); speeder: true = pościg ścigaczem w lesie.
 // Przeciwnicy: k: blaster | rifle | shield (tarcza z przodu) | sniper (laser, daleki strzał) | jet (plecak
 //   odrzutowy, strzały ukośne) | lord | drone; sty – wygląd (raider, aqua, snow, scout, ash, lord2–lord6),
 //   name – imię bossa, dbl – dwustronne ostrze, dual – dwa ostrza, sleep – śpi do alarmu.
@@ -295,7 +295,7 @@ const LEVELS = [
         foes: [{ k: 'rifle', sty: 'snow', r: 1, c: 5, dir: -1 },
           { k: 'lord', sty: 'lord4', name: 'Królowa Mrozu', dbl: true, r: 2, c: 6, dir: -1 }] },
     ] },
-  { name: 'Pas lodowych asteroid', ship: { diff: 1, from: 'krio', to: 'verdan' } },
+  { name: 'Pościg w lasach Verdan', ship: { diff: 1, from: 'krio', to: 'verdan', speeder: true } },
 
   // ===== Rozdział V – Leśny księżyc Verdan (wzór: leśny księżyc z gigantycznymi drzewami) =====
   { name: 'Korony drzew', theme: 10, sky: true, drop: true, chapter: 'ROZDZIAŁ V – LEŚNY KSIĘŻYC VERDAN',
