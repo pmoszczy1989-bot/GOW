@@ -189,10 +189,10 @@ const SND = {
 
 // ===== Wejście =====
 // Strzałki – ruch, A – wyciągnij ostrze / cios / podnieś / użyj, S – schowaj ostrze,
-// Shift – ostrożny krok, R – powtórz poziom.
+// Shift – ostrożny krok, D – bieg aury (stały klawisz), R – powtórz poziom.
 const K = {}, PR = {};
 const KEYMAP = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Shift: 'walk' };
-const LETTERS = { KeyA: 'act', KeyS: 'sheathe', KeyZ: 'pull', KeyX: 'push' };
+const LETTERS = { KeyA: 'act', KeyS: 'sheathe', KeyZ: 'pull', KeyX: 'push', KeyD: 'dash' };
 const keyOf = e => LETTERS[e.code] || LETTERS['Key' + String(e.key).toUpperCase()] || KEYMAP[e.key];
 function press(k) { if (!K[k]) PR[k] = true; K[k] = true; }
 function release(k) { K[k] = false; }
@@ -339,12 +339,14 @@ const SKILLS = [
   { name: 'GNIEW', col: '#ff9060', nodes: [
     { id: 'pull', name: 'Przyciąganie', power: true, d: 'Przyciąga wroga (QTE – szybkie A), przedmioty i drony.' },
     { id: 'choke', name: 'Uścisk', power: true, d: 'Unosi wroga i dusi go: 1–2 obrażenia. Lord się opiera.' },
-    { id: 'bolt', name: 'Pioruny aury', power: true, d: 'Błyskawice skaczą po 1–4 wrogach i ogłuszają.' } ] },
+    { id: 'bolt', name: 'Pioruny aury', power: true, d: 'Błyskawice skaczą po 1–4 wrogach i ogłuszają.' },
+    { id: 'vital', name: 'Witalność', free: true, d: 'Bez wymagań. +1 maks. życie na poziom (do +4).' } ] },
 ];
 const SKN = {};
 SKILLS.forEach((c, ci) => c.nodes.forEach((n, ni) => { SKN[n.id] = n; n.ci = ci; n.ni = ni; }));
 const POWER_COST = { pull: 45, push: 35, shield: 40, trick: 40, heal: 70, throw: 25, choke: 50, bolt: 55 };
 const skl = id => (game.sk && game.sk[id]) || 0;
+const hpMax = () => game.maxHp + skl('vital');    // bazowe życie (wielkie mikstury) + Witalność
 const skPts = () => Math.floor(game.crys / 10) - game.spent;
 // Nagroda w kryształach (pokonani wrogowie) – iskierki lecą do licznika
 function addCrys(n, x, y) {
@@ -356,7 +358,7 @@ function skReset() { game.sk = { pull: 1, push: 1, combo: 1 }; game.slots = ['pu
 function skSnap() { return { sk: Object.assign({}, game.sk), slots: game.slots.slice(), spent: game.spent }; }
 function skCan(n) {
   const c = SKILLS[n.ci];
-  return skl(n.id) < 4 && skPts() > 0 && (n.ni === 0 || skl(c.nodes[n.ni - 1].id) >= 1);
+  return skl(n.id) < 4 && skPts() > 0 && (n.ni === 0 || n.free || skl(c.nodes[n.ni - 1].id) >= 1);
 }
 function skUp(n) {
   if (!skCan(n)) {
@@ -365,6 +367,7 @@ function skUp(n) {
     SND.ui && SND.ui(0); return;
   }
   game.sk[n.id] = skl(n.id) + 1; game.spent++;
+  if (n.id === 'vital' && P) { P.max++; P.hp++; }
   if (game.sk[n.id] >= 4) achv('master');
   game.tmsg = n.name + ' – poziom ' + game.sk[n.id] + '!';
   if (n.power && skl(n.id) === 1 && !game.slots.includes(n.id)) game.tmsg += ' Przypisz do Z lub X.';
@@ -488,7 +491,7 @@ function loadLevel(i) {
     // Poziom lotu statkiem – logika w ship.js
     ROOMS = []; FOES = []; LOOSE = []; PLATS = []; MINES = []; spikes = {}; lamps = []; RD = { theme: 0, wl: 999 };
     MAP = [0, 1, 2].map(() => Array(COLS).fill(' '));
-    P = { x: 0, y: 0, r: 0, dir: 1, st: 'ship', t: 0, hp: game.maxHp, max: game.maxHp, sword: true, air: true,
+    P = { x: 0, y: 0, r: 0, dir: 1, st: 'ship', t: 0, hp: hpMax(), max: hpMax(), sword: true, air: true,
       drawn: false, inv: 0, ign: 0, trail: [], aura: 100, o2: 10, sink: 0, ph: 0 };
     msg = { text: '', t: 0 };
     startShip();
@@ -500,7 +503,7 @@ function loadLevel(i) {
   enterRoom(s.room || 0);
   P = {
     x: s.c * TW + 16, y: drop ? -70 : floorY(s.r), r: s.r, dir: s.dir, st: drop ? 'fall' : 'stand', t: 0,
-    vx: 0, vy: 0, air: drop, fallY: drop ? -70 : floorY(s.r), soft: drop, hp: game.maxHp, max: game.maxHp,
+    vx: 0, vy: 0, air: drop, fallY: drop ? -70 : floorY(s.r), soft: drop, hp: hpMax(), max: hpMax(),
     sword: i > 0, drawn: false, hang: null, hit: false, fd: 0, inv: 0, combo: 0, q: false, ign: 0, trail: [],
     aura: 100, o2: 10, ot: 1.5, sink: 0, ph: 0, pw: 0,
   };
@@ -528,7 +531,7 @@ function restart() {
 function start() { if (runSave()) contGame(); else beginGame(); }
 function toTitle() { game.live = false; game.mode = 'title'; buildMenu(); titleEl.classList.remove('hide'); }
 function finishLevel() {
-  game.maxHp = P ? P.max : game.maxHp;
+  game.maxHp = P ? P.max - skl('vital') : game.maxHp;
   if (!game.hurtLvl) achv(LV.ship ? 'pilot' : 'clean');
   if (lvl < LEVELS.length - 1) {
     const next = () => { game.mode = 'trans'; game.trans = 0; }, n = LEVELS[lvl + 1];
@@ -737,7 +740,8 @@ function groundCheck(running) {
 
 // Skok: wyższy i dalszy niż dawniej; Zwinność wydłuża go o 8% na poziom
 function jump(vx) {
-  const k = 1 + skl('agil') * 0.08;
+  let k = 1 + skl('agil') * 0.08;
+  if (P.dash && vx === 130 && P.aura >= 10) { k *= 1.35; P.aura -= 10; burst(P.x, P.y - 4, 6, game.blade.col, 60, 30, true); }   // skok z biegu aury
   P.st = 'jump'; P.t = 0; P.air = true; P.coy = 0; P.jb = 0;
   const v = vx === 90 ? 100 : vx === 130 ? 145 : vx;
   P.vx = P.dir * v * k; P.lvx = P.vx; P.vy = -175 - skl('agil') * 4; P.fallY = floorY(P.r);
@@ -1600,7 +1604,12 @@ function updPlayer(dt) {
   const p = P;
   p.t += dt;
   p.inv = Math.max(0, p.inv - dt);
-  p.aura = Math.min(100, p.aura + [18, 22, 26, 30, 36][skl('focus')] * (bladeId('amber') ? 1.3 : 1) * dt);
+  if (p.dash) p.aura = Math.max(0, p.aura - (26 - skl('focus') * 3) * dt);   // bieg aury zużywa aurę zamiast ją odnawiać
+  else p.aura = Math.min(100, p.aura + [18, 22, 26, 30, 36][skl('focus')] * (bladeId('amber') ? 1.3 : 1) * dt);
+  const dash0 = p.dash;
+  p.dash = !!K.dash && p.aura > 1 && (p.st === 'run' || (!!dash0 && (p.st === 'jump' || p.st === 'fall')));
+  if (p.dash && !dash0) { noise(0.3, 0.05, 500, 2600, 'bandpass'); tone(160, 0.3, 'sawtooth', 0.02, 460); }
+  if (PR.dash && p.aura <= 1) say('Za mało aury na bieg.', 1);
   p.sh = Math.max(0, (p.sh || 0) - dt);
   updThrow(dt);
   updO2(p, dt);
@@ -1707,9 +1716,10 @@ function updPlayer(dt) {
       if (back) { p.dir = -p.dir; p.st = 'turn'; p.t = 0; break; }
       if (!fwd || K.walk || foeAhead(p.dir)) { p.st = 'stand'; if (cell(p.r, colOf(p.x)) === 'I') p.slide = p.dir * 60; break; }
       if (PR.down) { p.st = 'crouch'; p.t = 0; break; }
-      const ice = cell(p.r, colOf(p.x)) === 'I' ? 1.15 : 1;
-      moveX(p, p.dir * 64 * ice * (onQ ? 0.6 : 1) * dt, p.r);
-      p.ph += 64 * ice * (onQ ? 0.6 : 1) * dt / 26;
+      const ice = cell(p.r, colOf(p.x)) === 'I' ? 1.15 : 1, sp = p.dash ? 1.9 : onQ ? 0.6 : 1;   // bieg aury: szybciej, bez grzęźnięcia
+      moveX(p, p.dir * 64 * ice * sp * dt, p.r);
+      p.ph += 64 * ice * Math.min(sp, 1.4) * dt / 26;
+      if (p.dash && Math.random() < 0.6) parts.push({ x: p.x - p.dir * 6, y: p.y - 6 - Math.random() * 16, vx: -p.dir * 30, vy: -5, life: 0.3, col: game.blade.col, e: true });
       groundCheck(true);
       break;
     }
@@ -4208,7 +4218,7 @@ function drawTree() {
     txt(C.name, treeBox(ci, 0).x + 48, 27, C.col, 'center', 6);
     C.nodes.forEach((n, ni) => {
       const b = treeBox(ci, ni), lv = skl(n.id), sel = ci === sc && ni === sn, can = skCan(n);
-      if (ni > 0) {
+      if (ni > 0 && !n.free) {
         ctx.fillStyle = lv > 0 ? C.col : '#2a3040';
         ctx.fillRect(b.x + 47, b.y - 4, 2, 4);
       }

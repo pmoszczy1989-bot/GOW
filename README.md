@@ -23,6 +23,7 @@ w prawym przyciski z ikonami: ostrze/cios, skok, przyciągnięcie, odepchnięcie
 |---|---|
 | ← → | bieg / obrót; pod wodą – pływanie |
 | Shift + ← → | ostrożny krok (zatrzymuje się na krawędzi i przed kolcami) |
+| D + ← → (trzymaj) | bieg aury: ~1,9× szybciej, przez ruchome piaski bez grzęźnięcia, skok z biegu o 35% dalej (−10 aury); zużywa aurę, przycisk ⏩ na dotyku |
 | ↑ | skok w górę / podciągnięcie / wyjście przez drzwi; z rozbiegu – skok w dal; w powietrzu (Zwinność 3) – podwójny skok; pod wodą – w górę, przy brzegu – wyjście |
 | ↑ + ← → w walce | skok z wyciągniętym ostrzem (A w powietrzu = cięcie z wyskoku) |
 | ↓ | kucnięcie (unik strzału); przy krawędzi – zwis; w zwisie – puszczenie; pod wodą – w dół |
@@ -104,7 +105,7 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
   Każde 10 kryształów = 1 punkt umiejętności (**U**). Każda umiejętność ma 4 poziomy (start: poziom 1 – najmniejszy zasięg).
 - **Drzewko umiejętności** (3 gałęzie): *Obrona* – Odepchnięcie, Tarcza aury, Omamienie, Uzdrowienie;
   *Ostrze* – Kombinacje (seria 2–5 cięć), Zwinność (dalsze skoki, miękkie lądowanie, podwójny skok),
-  Rzut ostrzem, Skupienie (regeneracja aury); *Gniew* – Przyciąganie, Uścisk (duszenie), Pioruny aury.
+  Rzut ostrzem, Skupienie (regeneracja aury); *Gniew* – Przyciąganie, Uścisk (duszenie), Pioruny aury, Witalność (bez wymagań, +1 maks. życie na poziom, do +4 – liczy się osobno od wielkich mikstur).
   Pod klawiszami Z i X można mieć maksymalnie **dwie moce**.
 - Skoki: chwilowy zapas po zejściu z krawędzi (0,15 s) i zapamiętanie wciśnięcia ↑ przed lądowaniem, chwyt krawędzi w locie (z większą tolerancją).
 - Wygodne sterowanie: **bufor wejścia** – ↑ lub A wciśnięte w trakcie lądowania, obrotu, zasłony czy użycia wykonuje się zaraz po animacji;
