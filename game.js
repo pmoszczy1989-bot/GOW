@@ -84,21 +84,97 @@ function tone(f, d, type, v, f2, delay) {
   o.connect(g); g.connect(AC.destination);
   o.start(t0); o.stop(t0 + d + 0.02);
 }
+// Szum filtrowany (syk, świst, trzask, eksplozja)
+let NB = null;
+function noise(d, v, f1, f2, type, delay, q) {
+  if (!AC) return;
+  if (!NB) {
+    NB = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+    const a = NB.getChannelData(0);
+    for (let i = 0; i < a.length; i++) a[i] = Math.random() * 2 - 1;
+  }
+  const t0 = AC.currentTime + (delay || 0);
+  const s = AC.createBufferSource(), fl = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = NB; s.loop = true;
+  fl.type = type || 'bandpass'; fl.Q.value = q || 1;
+  fl.frequency.setValueAtTime(f1, t0);
+  if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t0 + d);
+  g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+  s.connect(fl); fl.connect(g); g.connect(AC.destination);
+  s.start(t0, Math.random() * 0.5); s.stop(t0 + d + 0.02);
+}
+// Brzęczenie ostrza energii: dwa rozstrojone piły przez filtr; f → fm (w 40%) → f2
+function buzz(f, d, v, f2, cut, delay, fm) {
+  if (!AC) return;
+  const t0 = AC.currentTime + (delay || 0);
+  const g = AC.createGain(), fl = AC.createBiquadFilter();
+  fl.type = 'lowpass'; fl.frequency.value = cut || 900; fl.Q.value = 2;
+  for (const det of [0, 1.7]) {
+    const o = AC.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f + det, t0);
+    if (fm) o.frequency.linearRampToValueAtTime(fm + det, t0 + d * 0.4);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2 + det, t0 + d);
+    o.connect(fl); o.start(t0); o.stop(t0 + d + 0.02);
+  }
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(v, t0 + Math.min(0.03, d / 3));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+  fl.connect(g); g.connect(AC.destination);
+}
+// Trzask energii – seria krótkich, losowych impulsów
+function crackle(d, v, delay) {
+  const n = Math.round(d / 0.025);
+  for (let i = 0; i < n; i++) {
+    const dl = (delay || 0) + i * 0.025 + Math.random() * 0.01;
+    noise(0.03, v * (0.4 + Math.random() * 0.6), 1500 + Math.random() * 3000, 0, 'bandpass', dl, 0.8);
+    if (i % 2 === 0) tone(40 + Math.random() * 50, 0.03, 'square', v * 0.5, 0, dl);
+  }
+}
+// Ciągłe brzęczenie zapalonego ostrza (głośniejsze w ruchu i w walce)
+let HUM = null;
+function updHum() {
+  if (!AC) return;
+  const on = game.mode === 'play' && !LV.ship && P && P.sword && P.ign > 0.2 && P.st !== 'dead' && !P.thr;
+  if (!HUM && !on) return;
+  if (!HUM) {
+    const g = AC.createGain(), fl = AC.createBiquadFilter();
+    fl.type = 'lowpass'; fl.frequency.value = 340; fl.Q.value = 3;
+    g.gain.value = 0;
+    const os = [88, 89.6, 176].map(f => { const o = AC.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(fl); o.start(); return o; });
+    fl.connect(g); g.connect(AC.destination);
+    HUM = { g, fl, os };
+  }
+  const mv = Math.min(1, Math.abs(P.vx || 0) / 80) + (game.lock ? 1 : 0);
+  const lit = on ? 0.022 * Math.min(1, P.ign) + 0.012 * mv : 0;
+  const t = AC.currentTime;
+  HUM.g.gain.setTargetAtTime(lit, t, 0.06);
+  HUM.fl.frequency.setTargetAtTime(340 + 260 * mv, t, 0.08);
+  HUM.os[0].frequency.setTargetAtTime(88 + (game.lock ? 6 * Math.sin(game.anim * 30) : 0), t, 0.03);
+}
 const melody = (notes, len, type, v) => notes.forEach((f, i) => f && tone(f, len * 0.95, type, v, 0, i * len));
 const SND = {
-  thud: () => tone(110, 0.16, 'triangle', 0.14, 40),
-  swing: () => { tone(150, 0.2, 'sawtooth', 0.035, 70); tone(310, 0.16, 'triangle', 0.03, 130); },
-  clash: () => { tone(1800, 0.1, 'square', 0.04, 600); tone(2700, 0.08, 'sawtooth', 0.03, 900); tone(90, 0.15, 'sawtooth', 0.05, 60); },
-  hit: () => { tone(220, 0.18, 'sawtooth', 0.07, 50); tone(900, 0.06, 'square', 0.03, 300); },
-  blast: () => tone(1500, 0.13, 'square', 0.03, 160),
-  deflect: () => { tone(2300, 0.08, 'square', 0.035, 700); tone(480, 0.12, 'sawtooth', 0.03, 1300); },
-  ignite: () => { tone(70, 0.4, 'sawtooth', 0.05, 260); tone(140, 0.35, 'square', 0.02, 420); },
-  crash: () => { tone(160, 0.35, 'sawtooth', 0.07, 40); tone(90, 0.3, 'triangle', 0.1, 30); },
+  thud: () => { tone(110, 0.16, 'triangle', 0.14, 40); noise(0.12, 0.05, 400, 120, 'lowpass'); },
+  // „Wuuum” – świst ostrza: wysokość rośnie i opada (efekt Dopplera)
+  swing: () => { buzz(95, 0.32, 0.075, 70, 1300, 0, 165); noise(0.22, 0.03, 700, 2200, 'bandpass', 0, 1.5); },
+  // Zderzenie ostrzy – ostry syk i trzask energii
+  clash: () => { noise(0.3, 0.13, 3500, 1500, 'highpass'); crackle(0.25, 0.06); buzz(130, 0.3, 0.06, 60, 2000); tone(1900, 0.16, 'sawtooth', 0.02, 1300); },
+  hit: () => { buzz(150, 0.28, 0.08, 55, 1600); noise(0.18, 0.06, 1800, 500, 'bandpass'); },
+  // Blaster – „piu”: opadający, dzwoniący ton
+  blast: () => { tone(2300, 0.17, 'sine', 0.05, 190); tone(3400, 0.12, 'sine', 0.02, 300); tone(1150, 0.15, 'triangle', 0.02, 120); },
+  deflect: () => { tone(2800, 0.14, 'sine', 0.05, 520); noise(0.1, 0.08, 4000, 2000, 'highpass'); buzz(140, 0.15, 0.04, 90, 1500); },
+  // Zapalenie: trzask i narastające brzęczenie
+  ignite: () => { noise(0.08, 0.1, 3000, 0, 'highpass'); buzz(50, 0.6, 0.08, 95, 700, 0, 115); noise(0.35, 0.03, 900, 2600, 'bandpass', 0.02); },
+  retract: () => { buzz(110, 0.45, 0.07, 40, 700); noise(0.3, 0.03, 2600, 500, 'bandpass'); },
+  crash: () => { noise(0.6, 0.18, 1400, 80, 'lowpass'); tone(60, 0.45, 'sine', 0.12, 30); },
   rattle: () => { for (let i = 0; i < 3; i++) tone(200 + i * 40, 0.04, 'square', 0.03, 0, i * 0.05); },
   click: () => tone(320, 0.06, 'square', 0.05, 160),
   gem: () => melody([988, 1319, 1760], 0.06, 'triangle', 0.05),
-  zap: () => { tone(60, 0.25, 'sawtooth', 0.08, 120); tone(1200, 0.12, 'square', 0.03, 300); },
-  slash: () => { tone(90, 0.5, 'sawtooth', 0.06, 40); tone(2600, 0.25, 'triangle', 0.03, 500); },
+  zap: () => { crackle(0.45, 0.09); buzz(60, 0.45, 0.06, 45, 600); },
+  push: () => { noise(0.5, 0.16, 250, 2200, 'lowpass'); tone(70, 0.45, 'sine', 0.12, 38); },
+  pull: () => { noise(0.5, 0.14, 2200, 250, 'lowpass'); tone(45, 0.45, 'sine', 0.1, 80); },
+  choke: () => { tone(55, 0.8, 'sine', 0.12, 45); noise(0.8, 0.05, 220, 160, 'lowpass'); },
+  slash: () => { buzz(80, 0.6, 0.09, 40, 1500, 0, 190); noise(0.4, 0.06, 3000, 600, 'bandpass'); },
   tick: () => tone(150, 0.03, 'square', 0.025),
   alarm: () => melody([880, 660, 880, 660], 0.11, 'square', 0.03),
   die: () => melody([392, 330, 262, 196, 0, 131], 0.2, 'square', 0.05),
@@ -242,7 +318,7 @@ const SKILLS = [
     { id: 'combo', name: 'Kombinacje', d: 'Dłuższa seria cięć: 2–5 ciosów (młyniec, pchnięcie).' },
     { id: 'agil', name: 'Zwinność', d: 'Dalsze skoki. 2: miękkie lądowanie, 3: podwójny skok, 4: przeżyjesz upadek.' },
     { id: 'throw', name: 'Rzut ostrzem', power: true, d: 'Ostrze leci jak bumerang i wraca. Zasięg rośnie.' },
-    { id: 'focus', name: 'Skupienie', d: 'Szybsza regeneracja aury i tańsze moce.' } ] },
+    { id: 'focus', name: 'Skupienie', d: 'Szybsza regeneracja aury, tańsze moce i więcej czasu w zwarciu ostrzy.' } ] },
   { name: 'GNIEW', col: '#ff9060', nodes: [
     { id: 'pull', name: 'Przyciąganie', power: true, d: 'Przyciąga wroga (QTE – szybkie A), przedmioty i drony.' },
     { id: 'choke', name: 'Uścisk', power: true, d: 'Unosi wroga i dusi go: 1–2 obrażenia. Lord się opiera.' },
@@ -382,7 +458,7 @@ function loadLevel(i) {
   game.lvlMax = game.maxHp;
   BOLTS = []; parts = []; DEBRIS = []; WAVES = []; flash = null; used = false;
   gate = 0; gateT = 0; gateTick = 0;
-  game.shake = 0; game.stop = 0; game.hud = null; game.slowT = 0; game.bars = 0; game.qte = null;
+  game.shake = 0; game.stop = 0; game.hud = null; game.slowT = 0; game.bars = 0; game.qte = null; game.lock = null; game.lockCd = 0;
   game.crysLvl = game.crys;
   if (!game.sk) skReset();
   game.snap = skSnap(); updLabels();
@@ -832,7 +908,7 @@ const powerCost = k => Math.round(POWER_COST[k] * (1 - 0.1 * skl('focus')));
 
 function usePower(kind) {
   if (!kind) return false;
-  if (!P.sword) { say('Aura budzi się dopiero z ostrzem w dłoni.', 1.5); return false; }
+  if (!P.sword && kind === 'throw') { say('Rzut ostrzem – najpierw znajdź rękojeść.', 1.5); return false; }
   if (skl(kind) < 1) { say(PNAME[kind] + ' – moc jeszcze zablokowana (U – drzewko).', 1.5); return false; }
   if (kind === 'throw' && P.thr) return false;
   if (kind === 'heal' && P.hp >= P.max) { say('Jesteś w pełni sił.', 1); return false; }
@@ -844,7 +920,7 @@ function usePower(kind) {
   const by = bodyY(), d = P.dir, lv = skl(kind);
   if (kind === 'pull' || kind === 'push') {
     WAVES.push({ x: P.x + d * 8, y: by, dir: d, t: 0, k: kind, rg: kind === 'pull' ? pullRange() : pushRange() });
-    tone(kind === 'pull' ? 520 : 260, 0.35, 'sine', 0.05, kind === 'pull' ? 160 : 700);
+    if (kind === 'pull') SND.pull(); else SND.push();
     if (kind === 'push') auraPush(); else auraPull();
   } else if (kind === 'bolt') auraBolt(lv);
   else if (kind === 'choke') auraChoke(lv);
@@ -885,7 +961,7 @@ function auraTargets(range, back) {
 function auraBolt(lv) {
   const T = auraTargets(90 + 25 * lv).slice(0, lv);
   const pts = [[P.x + P.dir * 8, bodyY() - 4]];
-  tone(90, 0.45, 'sawtooth', 0.07, 60); tone(1800, 0.3, 'square', 0.025, 400);
+  SND.zap();
   flash = { col: '#a0c0ff', t: 0.1 }; shake(2);
   if (!T.length) {
     pts.push([P.x + P.dir * 60, bodyY() + 6]);
@@ -915,7 +991,7 @@ function auraBolt(lv) {
 // Uścisk – unosi najbliższego wroga i dusi go
 function auraChoke(lv) {
   const f = auraTargets(70 + 20 * lv).find(o => !isDrone(o));
-  tone(110, 0.6, 'triangle', 0.06, 70);
+  SND.choke();
   if (!f) { say('Brak celu dla uścisku.', 1); return; }
   f.aw = true;
   if (f.k === 'lord' && Math.random() < 0.6 - 0.1 * lv) {
@@ -1070,10 +1146,10 @@ function updQte(rdt) {
     flash = { col: '#ffffff', t: 0.15 };
     if (f.k === 'lord') {
       if (hitFoe(f, 2, d)) startFinisher(f);
-      else { P.st = 'strike'; P.t = 0.12; P.hit = true; P.combo = 0; game.slowT = 0.5; say('Cios aury! −2', 1.5); }
+      else { if (P.sword) { P.st = 'strike'; P.t = 0.12; P.hit = true; P.combo = 0; } game.slowT = 0.5; say('Cios aury! −2', 1.5); }
     } else if (isDrone(f)) {
       hitFoe(f, f.hp, d); game.slowT = 0.6; game.finName = 'CIOS AURY';
-      if (P.st !== 'swim') { P.st = 'strike'; P.t = 0.12; P.hit = true; } else P.sl = 0.3;
+      if (P.st !== 'swim' && P.sword) { P.st = 'strike'; P.t = 0.12; P.hit = true; } else if (P.st === 'swim') P.sl = 0.3;
     } else {
       f.hp = 1;
       if (hitFoe(f, 1, d)) startFinisher(f, 3);
@@ -1087,6 +1163,117 @@ function updQte(rdt) {
     else { f.st = 'tstun'; f.t = 0; say('Za wolno – przeciwnik się wyrwał.', 1.2); }
     if (P.st === 'power') P.st = afterFight();
   }
+}
+
+// ===== Zwarcie ostrzy z Lordem =====
+// Ostrza się sczepiają, świat zwalnia. Trzeba wcisnąć sekwencję klawiszy: A – cięcie, ↑ – nacisk,
+// Z/X – moce ze slotów. Użyte moce wyznaczają kombinację i finiszer (Burza, Fala, Uścisk…).
+const LKEY = { act: 'A', up: '↑', pull: 'Z', push: 'X' };
+const LNAME = { pull: 'PRZYCIĄGNIĘCIE', push: 'FALA', shield: 'TARCZA', trick: 'ZWÓD', heal: 'ODNOWA',
+  throw: 'WIR OSTRZA', choke: 'UŚCISK', bolt: 'BURZA' };
+function startLock(f) {
+  if (game.lock || game.lockCd > 0 || !P.sword || !f.alive || P.st === 'swim' || P.air || P.st === 'dead') return false;
+  const pw = [0, 1].filter(i => game.slots[i] && skl(game.slots[i]) > 0).map(i => i ? 'push' : 'pull');
+  const n = 4 + Math.floor(skl('combo') / 2) + (f.fury ? 1 : 0);
+  const seq = [...pw];
+  while (seq.length < n - 1) {
+    const r = Math.random();
+    seq.push(r < 0.5 ? 'act' : r < 0.75 || !pw.length ? 'up' : pw[Math.floor(Math.random() * pw.length)]);
+  }
+  for (let i = seq.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [seq[i], seq[j]] = [seq[j], seq[i]]; }
+  seq.unshift('act');
+  const win = Math.max(0.5, 1.05 - 0.07 * f.lv - (f.fury ? 0.12 : 0) + 0.06 * skl('focus'));
+  P.dir = Math.sign(f.x - P.x) || P.dir; f.dir = -P.dir;
+  const tx = P.x + P.dir * 24;
+  if (hasFloor(f.r, colOf(tx)) && !isWall(f.r, colOf(tx))) f.x = tx;
+  P.st = 'lock'; P.t = 0; P.combo = 0; P.drawn = true; P.ign = 1;
+  f.st = 'lock'; f.t = 0; f.lift = 0;
+  game.qte = null; game.finName = '';
+  game.lock = { f, seq, i: 0, t: 0, tot: 0, win, used: [] };
+  SND.clash(); shake(3); flash = { col: '#ffffff', t: 0.1 };
+  say('ZWARCIE OSTRZY!', 1.2);
+  return true;
+}
+function endLock() {
+  const L = game.lock;
+  game.lock = null; game.lockCd = 6;
+  if (P.st === 'lock') { P.st = 'fight'; P.t = 0; }
+  if (L && L.f.st === 'lock') { L.f.st = 'guard'; L.f.t = 0; L.f.cd = 0.4; }
+}
+function updLock(rdt) {
+  const L = game.lock, f = L.f;
+  L.t += rdt; L.tot += rdt;
+  if (!f.alive || P.st === 'dead') { endLock(); return; }
+  const mx = (P.x + f.x) / 2, my = P.y - 35;
+  if (Math.random() < rdt * 30) sparks(mx, my, Math.random() < 0.5 ? game.blade.col : RED.col, 2);
+  if (Math.floor(L.tot * 5) !== Math.floor((L.tot - rdt) * 5)) crackle(0.1, 0.025);
+  if (L.tot < 0.2) return;                        // krótka chwila na zorientowanie się
+  const got = ['act', 'up', 'pull', 'push', 'down', 'left', 'right'].find(k => PR[k]);
+  if (got) {
+    if (got !== L.seq[L.i]) { lockFail(L, 'Zły ruch!'); return; }
+    lockStep(L, got); L.i++; L.t = 0;
+    if (L.i >= L.seq.length) lockWin(L);
+    return;
+  }
+  if (L.t > L.win) lockFail(L, 'Za wolno!');
+}
+function lockStep(L, k) {
+  const f = L.f, d = P.dir;
+  game.stop = 0.04;
+  if (k === 'act' || k === 'up') {
+    const mx = (P.x + f.x) / 2, my = P.y - 35;
+    SND.clash(); shake(2);
+    sparks(mx, my, game.blade.col, 10); sparks(mx, my, RED.col, 6);
+    if (k === 'up' && moveX(f, d * 3, f.r)) moveX(P, d * 3, P.r);   // nacisk – spychasz Lorda
+    return;
+  }
+  const pk = game.slots[k === 'pull' ? 0 : 1];
+  L.used.push(pk);
+  lockFx(pk, f);
+}
+// Efekt mocy w zwarciu (wizualny i dźwiękowy)
+function lockFx(k, f) {
+  const d = P.dir, by = P.y - 24, fy = f.y - 24;
+  switch (k) {
+    case 'pull': SND.pull(); WAVES.push({ x: P.x + d * 8, y: by, dir: d, t: 0, k: 'pull', rg: 45 }); break;
+    case 'push': SND.push(); WAVES.push({ x: P.x + d * 8, y: by, dir: d, t: 0, k: 'push', rg: 60 }); burst(f.x, fy, 8, '#c0d0ff', 60, 30, true); break;
+    case 'bolt': SND.zap(); WAVES.push({ k: 'bolt', t: 0, pts: [[P.x + d * 8, by - 4], [f.x, fy]] }); sparks(f.x, fy, '#a0c0ff', 12); flash = { col: '#a0c0ff', t: 0.08 }; break;
+    case 'choke': SND.choke(); for (let i = 0; i < 8; i++) burst(f.x, f.y - 30, 1, '#c090ff', 30, 20, true); break;
+    case 'shield': tone(330, 0.4, 'sine', 0.05, 660); burst(P.x, by, 14, '#80c0ff', 60, 40, true); break;
+    case 'trick': tone(700, 0.4, 'sine', 0.035, 900); for (let i = 0; i < 6; i++) burst(f.x, f.y - 36, 1, '#e0c0ff', 30, 20, true); break;
+    case 'heal': SND.drink(); burst(P.x, by, 12, '#80ffa0', 40, 50, true); break;
+    case 'throw': SND.swing(); sparks(f.x, fy, game.blade.col, 12); break;
+  }
+}
+function lockWin(L) {
+  const f = L.f, d = P.dir, u = [...new Set(L.used)];
+  const dmg = Math.min(4, 2 + u.length);
+  const name = u.length ? u.map(k => LNAME[k]).join(' + ') : 'SERIA CIĘĆ';
+  endLock();
+  flash = { col: '#ffffff', t: 0.2 }; shake(4); SND.slash();
+  for (const k of u) lockFx(k, f);
+  if (u.includes('heal')) P.hp = Math.min(P.max, P.hp + 1);
+  if (u.includes('shield')) { P.sh = 2; P.shMax = 2; }
+  if (hitFoe(f, dmg, d)) {
+    if (f.st === 'fin') { startFinisher(f); game.finName = name; game.slowT = 2; }
+    return;
+  }
+  game.slowT = 0.9; game.finName = name;
+  P.st = 'strike'; P.t = 0; P.hit = true; P.combo = u.includes('pull') ? 2 : u.length ? 1 : 0;
+  if (u.includes('push')) { f.st = 'knock'; f.t = 0; f.vx = d * 220; f.dir = -d; }
+  else { f.st = 'stun'; f.t = u.some(k => k === 'bolt' || k === 'trick' || k === 'choke') ? -0.9 : -0.2; }
+  if (u.includes('choke')) f.lift = 0;
+  say('Zwarcie wygrane! ' + name + ' (−' + dmg + ')', 2);
+}
+function lockFail(L, why) {
+  const f = L.f, d = P.dir;
+  endLock();
+  SND.clash(); shake(3);
+  sparks((P.x + f.x) / 2, P.y - 35, RED.col, 14);
+  f.st = 'gstrike'; f.t = 0.05; f.hit = true;
+  P.inv = 0; hurtPlayer(1, -d, 'lord');
+  if (P.st !== 'dead') { moveX(P, -d * 10, P.r); groundCheck(false); }
+  say(why + ' ' + lordName(f) + ' przełamuje zwarcie!', 1.8);
 }
 
 // ===== Pływanie =====
@@ -1432,7 +1619,7 @@ function updPlayer(dt) {
     }
     case 'fight': {
       const t = engaged();
-      if (PR.sheathe) { p.drawn = false; p.st = 'stand'; p.t = 0; SND.swing(); break; }   // S – schowanie ostrza
+      if (PR.sheathe) { p.drawn = false; p.st = 'stand'; p.t = 0; SND.retract(); break; }   // S – schowanie ostrza
       if (!t && !p.drawn) { p.st = 'stand'; break; }
       if (t) p.dir = Math.sign(t.x - p.x) || p.dir;
       if (!t && PR.act && (tryPick() || tryUse())) break;
@@ -1549,6 +1736,7 @@ function resolveStrike() {
   }
   if (!t) { const c = crateAhead(); if (c >= 0) breakCrate(c); return; }
   if (t.st === 'gblock') {
+    if (t.k === 'lord' && Math.random() < 0.3 && startLock(t)) return;
     SND.clash(); shake(2); game.stop = 0.05;
     const x = (P.x + t.x) / 2;
     sparks(x, P.y - 26, game.blade.col, 8); sparks(x, P.y - 26, RED.col, 8);
@@ -1806,6 +1994,7 @@ function updLord(f, dt) {
       f.cd -= dt * sp;
       if (f.cd <= 0) {
         if (d < 30 && Math.random() < 0.3) { f.st = 'hop'; f.t = 0; SND.swing(); }   // odskok i wypad
+        else if (d < 40 && Math.random() < 0.18 && FIGHTST.includes(P.st) && startLock(f)) break;   // Lord naciera i sczepia ostrza
         else if (d < 46) { f.st = 'wind'; f.t = 0; }
         else if (d < 110 && Math.random() < 0.5) { f.st = 'lunge'; f.t = 0; SND.swing(); }
         else f.cd = 0.3;
@@ -1829,6 +2018,7 @@ function updLord(f, dt) {
         f.hit = true;
         if (same && d < 44 && Math.sign(dx) === f.dir) {
           if (P.st === 'block') {
+            if (Math.random() < 0.5 && startLock(f)) break;   // ostrza się sczepiają
             SND.clash(); shake(2); game.stop = 0.05;
             const x = (P.x + f.x) / 2;
             sparks(x, f.y - 28, game.blade.col, 8); sparks(x, f.y - 28, RED.col, 8);
@@ -1989,7 +2179,8 @@ function updBarriers() {
 function update(dt) {
   game.anim += dt;
   game.shake = Math.max(0, game.shake - dt * 10);
-  game.bars += ((game.slowT > 0 ? 1 : 0) - game.bars) * Math.min(1, dt * 8);
+  game.bars += ((game.slowT > 0 || game.lock ? 1 : 0) - game.bars) * Math.min(1, dt * 8);
+  updHum();
   if (game.mode === 'trans') {
     game.trans += dt;
     if (game.trans > 2.4) loadLevel(lvl + 1);
@@ -2007,13 +2198,15 @@ function update(dt) {
     return;
   }
   if (game.stop > 0) { game.stop -= dt; return; }       // „zatrzymanie klatki” przy trafieniu
-  if (game.qte) { updQte(dt); dt *= 0.3; }              // przyciągnięty przeciwnik – świat zwalnia
+  if (game.lockCd > 0) game.lockCd -= dt;
+  if (game.lock) { updLock(dt); dt *= 0.15; }           // zwarcie ostrzy – świat prawie staje
+  else if (game.qte) { updQte(dt); dt *= 0.3; }         // przyciągnięty przeciwnik – świat zwalnia
   else if (game.slowT > 0) { game.slowT -= dt; dt *= 0.35; }  // zwolnione tempo finiszera
   if (P.st !== 'dead' && P.st !== 'exit') game.time += dt;
   if (msg.t > 0 && msg.t < 90) msg.t -= dt;
   if (game.hudT > 0) game.hudT -= dt;
   updPlats(dt);
-  if (!game.qte) updPlayer(dt);
+  if (!game.qte && !game.lock) updPlayer(dt);
   roomCheck();
   for (const f of FOES) updFoe(f, dt);
   updMines(dt);
@@ -2459,6 +2652,8 @@ const POSE = {
   strike2: [3, -29, 2, -25, 0, -14, 6, -7, 8, 0, -3, -7, -5, 0, 6, -24, 9, -29, -2, -21, -5, -18, 22, -44],
   chop: [4, -27, 3, -23, 1, -13, 7, -7, 9, 0, -3, -6, -6, 0, 8, -18, 11, -13, -2, -20, -5, -20, 25, -3],
   block: [0, -28, 0, -24, -1, -13, 3, -7, 4, 0, -3, -7, -5, 0, 3, -22, 5, -26, -3, -20, -5, -21, 9, -42],
+  // Zwarcie ostrzy: pochylenie do przodu, obie dłonie na rękojeści, ostrze skośnie w górę
+  lock: [3, -27, 2, -23, -1, -13, 5, -7, 8, 0, -4, -7, -8, 0, 7, -20, 10, -23, 1, -20, 9, -22, 19, -38],
   lunge: [5, -26, 4, -22, 1, -13, 9, -6, 12, 0, -4, -6, -9, 0, 9, -20, 13, -20, -1, -20, -4, -22, 30, -22],
   hurt: [-3, -28, -2, -24, 0, -13, 2, -7, 3, 0, -2, -7, -4, 0, 0, -19, 3, -16, -4, -20, -6, -17, 12, -10],
   dead: [12, -3, 8, -3, 0, -3, -5, -3, -11, -1, -5, -2, -11, 0, 8, -1, 13, 0, 6, -2, 4, 0],
@@ -2811,6 +3006,12 @@ function drawPlayer() {
     case 'fstep': a = gait(POSE.fight, p.ph, false, false); blade = 'hand'; break;
     case 'strike': { const s = slashPose(p.t, p.combo); a = s.a; tr = s.tr; blade = 'hand'; if (s.flip) fdir = -p.dir; break; }
     case 'block': a = POSE.block; blade = 'hand'; break;
+    case 'lock': {
+      a = POSE.lock.slice(); blade = 'hand'; ign = 1;
+      const j = Math.sin(game.anim * 37) * 0.6;
+      a[0] += j; a[16] += j; a[18] += j; a[20] += j; a[22] += j;
+      break;
+    }
     case 'fin': { const s = finPose(p); a = s.a; tr = s.tr; y += s.dy; blade = 'hand'; break; }
     case 'use': a = POSE.aim; break;
     case 'hurt': a = POSE.hurt; blade = p.sword && p.ign > 0.02 ? 'hand' : blade; break;
@@ -2892,6 +3093,7 @@ function drawFoe(f) {
       case 'lunge': a = POSE.lunge; tr = true; break;
       case 'gstrike': a = f.t < 0.08 ? lerpPose(POSE.windup, POSE.strike, ease(f.t / 0.08)) : POSE.strike; tr = f.t < 0.14; break;
       case 'gblock': a = POSE.block; break;
+      case 'lock': a = POSE.lock.slice(); { const j = Math.cos(game.anim * 33) * 0.6; a[16] += j; a[22] += j; } break;
       case 'ghurt': case 'stun': a = POSE.hurt; break;
       case 'fin':
         // Ostrze gaśnie, Lord klęka i rozpływa się w żarze
@@ -3217,6 +3419,11 @@ function drawAuraFx() {
     EQ.push({ x: f.x, y, col: '#c090ff', r: 12, a: 0.4, rgb: '190,140,255' });
   }
   const q = game.qte;
+  if (game.lock) {
+    const f = game.lock.f, mx = (P.x + f.x) / 2, my = P.y - 35;
+    EQ.push({ x: mx, y: my, col: '#ffffff', r: 18 + Math.random() * 6, a: 0.7, rgb: '255,230,200' });
+    dot(mx, my, 1.5 + Math.random(), '#ffffff');
+  }
   if (q) {
     const f = q.f, x = f.x, y = (isDrone(f) ? f.y : f.y - 18) - (f.lift || 0);
     const left = Math.max(0, 1 - Math.max(0, q.t - 0.15) / (0.15 + q.win));
@@ -3308,6 +3515,7 @@ function hint() {
   const p = P, ch = cell(p.r, colOf(p.x));
   if (p.st === 'dead') return 'R lub A – spróbuj ponownie';
   if (game.qte) return 'TERAZ! A – cios aury';
+  if (game.lock) return 'ZWARCIE! Wciskaj klawisze po kolei – szybko!';
   if (p.st === 'swim') {
     if (p.o2 < 4) return 'Brak tlenu! Wypłyń lub znajdź kratkę z powietrzem';
     return '←→↑↓ płyń · A cięcie · Z/X aura' + (p.y <= RD.wl + 12 ? ' · ↑ przy brzegu – wyjdź' : '');
@@ -3326,7 +3534,7 @@ function hint() {
   if (ch === 'K') return used ? '' : 'A – użyj konsoli';
   if (atDoor()) return doorOpen() ? '↑ – wyjdź przez wrota' : 'Pokonaj Lorda, by zgasić pole siłowe';
   if (crateAhead() >= 0) return p.sword ? 'A – rozbij skrzynię' : 'Skrzynię rozetnie tylko ostrze';
-  if (!p.sword) return '←→ bieg · Shift+←→ ostrożny krok · ↑ skok · ↓ zwis';
+  if (!p.sword) return '←→ bieg · ↑ skok · ↓ zwis · Z/X aura (moc działa i bez ostrza)';
   if (gate >= 0.8 && gateT <= 0 && !used) return 'Krata się zamyka – biegnij!';
   if (shooter) { const i = game.slots.indexOf('push'); return 'Strzelec! A – cięcie odbija strzały' + (i >= 0 ? ' · ' + 'ZX'[i] + ' fala aury' : ''); }
   if (p.sword && game.slots.includes('pull') && FOES.some(f => f.alive && f.aw && f.r === p.r && Math.abs(f.x - p.x) < 150))
@@ -3358,7 +3566,7 @@ function drawHUD() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 180, SW, 20);
   for (let i = 0; i < P.max; i++) tri(4 + i * 9, 186, i < P.hp, '#e82020', '#701010');
   // Pasek aury (i tlenu pod wodą)
-  if (P.sword) {
+  {
     rrect(4, 193.5, 40, 2.4, 1, '#1a2030');
     rrect(4, 193.5, 40 * P.aura / 100, 2.4, 1, P.aura >= 45 ? '#80c8ff' : P.aura >= 35 ? '#6a90c0' : '#3a4a68');
   }
@@ -3380,12 +3588,30 @@ function drawHUD() {
   txt('◆ ' + game.crys, SW - 30, 6, '#80e0ff', 'right', 7);
   txt((lvl + 1) + '/' + LEVELS.length + '  ' + LV.name, 4, 6, '#a8a0c0', 'left', 7);
   // Moce w slotach Z / X (szare – za mało aury) i wolne punkty umiejętności
-  if (P.sword && game.slots) game.slots.forEach((k, i) => {
-    const ok = P.aura >= powerCost(k) && !(k === 'throw' && P.thr);
+  if (game.slots) game.slots.forEach((k, i) => {
+    const ok = P.aura >= powerCost(k) && !(k === 'throw' && (P.thr || !P.sword));
     txt((i ? 'X ' : 'Z ') + PNAME[k], 4 + i * 66, 15, ok ? '#a8d8ff' : '#56607a', 'left', 6);
   });
   const pts = skPts();
   if (pts > 0) txt('✦ ' + pts + ' pkt – U', SW - 4, 15, Math.floor(game.anim * 3) % 2 ? '#ffe080' : '#c0a050', 'right', 6);
+  // Zwarcie ostrzy – sekwencja klawiszy do wciśnięcia
+  const L = game.lock;
+  if (L) {
+    const n = L.seq.length, w = 18, x0 = SW / 2 - n * w / 2, y = 30;
+    txt('ZWARCIE OSTRZY', SW / 2, y - 6, '#ffe0a0', 'center', 9);
+    L.seq.forEach((k, i) => {
+      const x = x0 + i * w + 2, cur = i === L.i, done = i < L.i;
+      rrect(x, y, w - 4, 14, 2, done ? '#1e5a34' : cur ? '#34487e' : '#181a28');
+      const pw = k === 'pull' || k === 'push' ? game.slots[k === 'pull' ? 0 : 1] : null;
+      const pulse = cur ? 1 + Math.sin(game.anim * 18) * 0.1 : 1;
+      txt(LKEY[k], x + (w - 4) / 2, y + 7, done ? '#90ffb0' : cur ? '#ffffff' : pw ? '#b0a0ff' : '#8890a8', 'center', (cur ? 9 : 7) * pulse);
+      if (pw) txt(LNAME[pw].slice(0, 6), x + (w - 4) / 2, y + 18, done ? '#90ffb0' : '#a098d0', 'center', 3.5);
+      if (cur) {
+        const k2 = Math.max(0, 1 - L.t / L.win);
+        rrect(x, y + 15, (w - 4) * k2, 1.4, 0.7, k2 > 0.35 ? '#80e0ff' : '#ff6040');
+      }
+    });
+  }
 }
 
 // Odłamki: rozcięta broń, deski, rękojeść Lorda (gorący koniec żarzy się)
@@ -3546,5 +3772,5 @@ window.GOW = {
   get P() { return P; }, get FOES() { return FOES; }, get BOLTS() { return BOLTS; }, get gate() { return gate; },
   get lvl() { return lvl; }, get ROOMS() { return ROOMS; }, get ri() { return ri; }, get RD() { return RD; },
   get MINES() { return MINES; }, get PLATS() { return PLATS; }, get SHIP() { return typeof SHIP !== 'undefined' ? SHIP : null; },
-  game, K, PR, LEVELS, update, draw, loadLevel, newGame, restart, start, cell, enterRoom, STEP,
+  game, K, PR, LEVELS, update, draw, loadLevel, newGame, restart, start, cell, enterRoom, STEP, startLock, usePower,
 };

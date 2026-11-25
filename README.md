@@ -75,6 +75,16 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
   Patrolują, trzymają dystans strzału, cofają się przed ostrzem. Blaster 3 trafienia, karabin 4 (później więcej).
   Kucnięcie przepuszcza strzał, zasłona lub cięcie odbija go we wroga.
 - Lord (10 trafień) paruje, odskakuje i wpada w furię przy 5 życiach.
+- **Zwarcie ostrzy** (tylko Lordowie): gdy zasłonisz się przed ciosem, Lord sparuje twój cios albo sam naciera,
+  ostrza mogą się sczepić. Świat prawie staje, a nad sceną pojawia się sekwencja klawiszy:
+  **A** cięcie, **↑** nacisk, **Z**/**X** moc ze slotu. Każdy klawisz trzeba wcisnąć w krótkim oknie
+  (krótszym na późniejszych planetach i w furii, dłuższym ze Skupieniem). Dłuższe sekwencje daje rozwinięte Kombinacje.
+  Wygrana zadaje 2 obrażenia + 1 za każdą użytą moc (maks. 4). Nazwa i efekt finiszera zależą od mocy
+  (np. „BURZA + FALA”: Fala odrzuca Lorda, Burza/Zwód/Uścisk ogłuszają, Odnowa leczy, Tarcza osłania).
+  Zły klawisz lub zwłoka: Lord przełamuje zwarcie i rani (−1).
+- **Aura działa bez ostrza** – od początku możesz przyciągać i odpychać (tylko Rzut ostrzem wymaga rękojeści).
+- **Dźwięk** syntezowany na żywo (WebAudio): buczenie zapalonego ostrza, „wuuum” przy cięciach, trzask zwarcia,
+  „piu” blasterów, szum fali aury – w klimacie filmów, ale autorski.
 - **Aura** (pasek pod życiem, odnawia się): przyciągnięcie uruchamia quick time event – szybkie **A**
   daje efektowne zakończenie; Lordowi zabiera 2 życia, ale Lord potrafi się opierać przyciąganiu
   i kontratakuje, gdy zareagujesz za wolno. Odepchnięcie odrzuca wrogów i strzały.
