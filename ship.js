@@ -1,7 +1,8 @@
 'use strict';
 // ===== Lot kosmiczny – boczna strzelanka myśliwcem „Szpon” =====
 // Wywoływane z game.js: startShip() w loadLevel(), updShip(dt) w update(), drawShip() w draw().
-// Konfiguracja poziomu: LV.ship = { diff: 0|1, from: 'cytadela'|'pustynia', to: 'pustynia'|'ocean' }.
+// Konfiguracja poziomu: LV.ship = { diff: 0|1, from, to } – planety: cytadela, pustynia, ocean, krio, verdan, ignis.
+// Każde 3 zestrzelenia = +1 kryształ (maks. 10) po skoku w nadprzestrzeń.
 
 let SHIP = null;
 
@@ -35,7 +36,7 @@ function startShip() {
   for (let l = 0; l < 3; l++)
     for (let i = 0; i < 26 + l * 6; i++)
       SHIP.stars.push({ x: Math.random() * SW, y: Math.random() * 180, l, v: sp[l] * (0.8 + Math.random() * 0.4) });
-  say(diff ? 'Blokada orbitalna – przebij się przez flotę!' : 'Ucieczka z orbity – zgub pościg!', 3);
+  say(LV.name + (diff ? ' – przebij się przez flotę!' : ' – zgub pościg!'), 3);
 }
 
 // Scenariusz fal: lista wzorców rozłożonych w czasie
@@ -255,7 +256,7 @@ function updShip(dt) {
     S.x += (S.jumpT > 0.9 ? 600 : 20) * dt;
     if (S.x < SW + 40 && S.parts.length < SH_MAXP)
       shPart({ k: 'trail', x: S.x - 13, y: S.y + (Math.random() - 0.5) * 4, vx: -260, vy: 0, t: 0, life: 0.25, rgb: game.blade.rgb });
-    if (S.jumpT >= 1.5 && !S.done) { S.done = true; S.phase = 'won'; finishLevel(); }
+    if (S.jumpT >= 1.5 && !S.done) { S.done = true; S.phase = 'won'; game.crys += Math.min(10, Math.floor(S.kills / 3)); finishLevel(); }
     return;
   }
 
@@ -539,6 +540,9 @@ function shDrawPlanet(kind, cx, cy, r) {
     cytadela: { base: ['#6a4c9c', '#2a1840', '#0c0614'], atm: '170,120,255' },
     pustynia: { base: ['#f0b870', '#c06a30', '#401a08'], atm: '255,180,110' },
     ocean: { base: ['#4ac0d8', '#14608c', '#04162c'], atm: '110,200,255' },
+    krio: { base: ['#f0f8ff', '#8ab4d8', '#1a3050'], atm: '200,230,255' },
+    verdan: { base: ['#8ad070', '#2a6a3a', '#0a2010'], atm: '150,255,150' },
+    ignis: { base: ['#ff9040', '#8a2010', '#200402'], atm: '255,100,40' },
   }[kind] || { base: ['#888', '#444', '#111'], atm: '200,200,200' };
   ctx.globalCompositeOperation = 'lighter';
   glow(cx, cy, r * 1.25, pal.atm, 0.18);
@@ -569,6 +573,28 @@ function shDrawPlanet(kind, cx, cy, r) {
     for (let i = 0; i < 3; i++) {
       const a = shHash(i + 40) * 6.28, dd = shHash(i + 41) * r * 0.6;
       dot(cx + Math.cos(a) * dd, cy + Math.sin(a) * dd, r * 0.09, 'rgba(60,130,80,0.5)');
+    }
+  } else if (kind === 'krio') {
+    for (let i = 0; i < 5; i++) {
+      const a = shHash(i + 50) * 6.28, dd = shHash(i + 51) * r * 0.7;
+      dot(cx + Math.cos(a + rot * 6.28) * dd, cy + Math.sin(a) * dd * 0.8, r * (0.08 + shHash(i) * 0.08), 'rgba(255,255,255,0.4)');
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 0.35); ctx.fillRect(cx - r, cy + r * 0.7, r * 2, r * 0.3);
+  } else if (kind === 'verdan') {
+    for (let i = 0; i < 9; i++) {
+      const a = shHash(i + 60) * 6.28 + rot * 6.28, dd = shHash(i + 61) * r * 0.85;
+      dot(cx + Math.cos(a) * dd, cy + Math.sin(a * 1.2) * dd * 0.8, r * (0.1 + shHash(i + 2) * 0.12), 'rgba(20,70,30,0.5)');
+    }
+    ctx.strokeStyle = 'rgba(240,255,240,0.3)'; ctx.lineWidth = Math.max(0.6, r * 0.04);
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(cx + (shHash(i + 70) - 0.5) * r, cy + (shHash(i + 71) - 0.5) * r, r * 0.15, 0, 3); ctx.stroke(); }
+  } else if (kind === 'ignis') {
+    ctx.strokeStyle = 'rgba(255,220,80,0.75)'; ctx.lineWidth = Math.max(0.5, r * 0.03);
+    for (let i = 0; i < 7; i++) {
+      const a = shHash(i + 80) * 6.28 + rot * 6.28; let x = cx + Math.cos(a) * r * 0.2, y = cy + Math.sin(a) * r * 0.2;
+      ctx.beginPath(); ctx.moveTo(x, y);
+      for (let k = 0; k < 4; k++) { x += Math.cos(a + k) * r * 0.2; y += Math.sin(a + k * 0.7) * r * 0.2; ctx.lineTo(x, y); }
+      ctx.stroke();
     }
   } else {
     ctx.fillStyle = 'rgba(20,10,40,0.35)';
@@ -871,7 +897,7 @@ function shDrawHUD() {
     txt('KLINGA', bx0 - 4, 183.5, '#e06050', 'right', 5.5, true);
   } else {
     const prog = Math.min(1, S.t / S.D);
-    const pc = { cytadela: '#8a60d0', pustynia: '#e09050', ocean: '#40b0d8' };
+    const pc = { cytadela: '#8a60d0', pustynia: '#e09050', ocean: '#40b0d8', krio: '#c0e0ff', verdan: '#70d060', ignis: '#ff6020' };
     ctx.fillStyle = '#1c1c2c'; ctx.fillRect(bx0, 183, bw, 1.5);
     ctx.fillStyle = '#5a5a7a'; ctx.fillRect(bx0, 183, bw * prog, 1.5);
     dot(bx0 - 3, 183.7, 2.2, pc[S.from] || '#888');

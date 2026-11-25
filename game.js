@@ -132,13 +132,20 @@ function toggleFull() {
 }
 const fullBtn = document.getElementById('full');
 if (fullBtn) fullBtn.addEventListener('click', e => { e.stopPropagation(); toggleFull(); });
+const treeBtn = document.getElementById('treeb');
+if (treeBtn) {
+  treeBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  treeBtn.addEventListener('click', e => { e.stopPropagation(); audioOn(); if (game.mode !== 'title') openTree(); });
+}
 ['fullscreenchange', 'webkitfullscreenchange'].forEach(n => document.addEventListener(n, () => setTimeout(fit, 50)));
 
 window.addEventListener('keydown', e => {
   if (e.key === 'f' || e.key === 'F') { toggleFull(); e.preventDefault(); return; }
   if (game.mode === 'title') { start(); e.preventDefault(); return; }
-  if (e.key === 'r' || e.key === 'R') { restart(); return; }
+  if (e.key === 'r' || e.key === 'R') { if (game.mode !== 'tree') restart(); return; }
+  if (e.key === 'u' || e.key === 'U' || (game.mode === 'tree' && e.key === 'Escape')) { openTree(); e.preventDefault(); return; }
   const k = keyOf(e);
+  if (game.mode === 'tree') { if (k && !e.repeat) treeKey(k); e.preventDefault(); return; }
   if (game.mode === 'win' && (e.key === 'Enter' || k === 'act')) { newGame(); return; }
   if (k) { e.preventDefault(); press(k); }
 });
@@ -158,6 +165,7 @@ document.querySelectorAll('#touch button[data-k]').forEach(b => {
   const on = e => {
     e.preventDefault(); audioOn();
     if (game.mode === 'title') { start(); return; }
+    if (game.mode === 'tree') { e.preventDefault(); treeKey(k); return; }
     if (k === 'act' && game.mode === 'win') { newGame(); return; }
     if (k === 'act' && P && P.st === 'dead' && P.t > 1.5) { restart(); return; }
     try { b.setPointerCapture(e.pointerId); } catch (er) {}
@@ -206,9 +214,10 @@ if (stick) {
   stick.addEventListener('pointercancel', end);
   stick.addEventListener('lostpointercapture', end);
 }
-// Dotknięcie ekranu gry po śmierci / zwycięstwie
-cv.addEventListener('pointerdown', () => {
+// Dotknięcie ekranu gry po śmierci / zwycięstwie; w drzewku – wybór węzła
+cv.addEventListener('pointerdown', e => {
   audioOn();
+  if (game.mode === 'tree') { treeTap(e); return; }
   if (game.mode === 'win') newGame();
   else if (game.mode === 'play' && P && P.st === 'dead' && P.t > 1.5) restart();
 });
@@ -217,7 +226,103 @@ cv.addEventListener('pointerdown', () => {
 let lvl = 0, LV, MAP, P, FOES, LOOSE, BOLTS, gate, gateT, gateTick, spikes, parts, msg, flash, lamps, DEBRIS, used;
 let ROOMS = [], ri = 0, RD = {}, PLATS = [], MINES = [], WAVES = [];
 const game = { mode: 'title', time: 0, anim: 0, blade: BLADES[0], maxHp: 3, lvlMax: 3, shake: 0, stop: 0, trans: 0, hud: null,
-  crys: 0, crysLvl: 0, slowT: 0, bars: 0, finName: '', qte: null };
+  crys: 0, crysLvl: 0, slowT: 0, bars: 0, finName: '', qte: null,
+  sk: null, slots: null, spent: 0, snap: null, tsel: [0, 0], tmsg: '' };
+
+// ===== Drzewko umiejętności =====
+// Co 10 kryształów – 1 punkt. Każdy węzeł ma 4 poziomy; węzeł wymaga poprzedniego w kolumnie (poz. ≥ 1).
+// power: moc, którą można przypisać do slotu Z / X (max dwie moce pod przyciskami).
+const SKILLS = [
+  { name: 'OBRONA', col: '#60b0ff', nodes: [
+    { id: 'push', name: 'Odepchnięcie', power: true, d: 'Fala aury odrzuca wrogów, strzały i miny. Zasięg rośnie.' },
+    { id: 'shield', name: 'Tarcza aury', power: true, d: 'Kopuła łapie strzały (2–5 s). Od poz. 3 odbija je.' },
+    { id: 'trick', name: 'Omamienie', power: true, d: 'Żołnierze w zasięgu tracą głowę i stoją oszołomieni.' },
+    { id: 'heal', name: 'Uzdrowienie', power: true, d: 'Aura leczy rany: +1 życie (poz. 4: +2).' } ] },
+  { name: 'OSTRZE', col: '#70f0a0', nodes: [
+    { id: 'combo', name: 'Kombinacje', d: 'Dłuższa seria cięć: 2–5 ciosów (młyniec, pchnięcie).' },
+    { id: 'agil', name: 'Zwinność', d: 'Dalsze skoki. 2: miękkie lądowanie, 3: podwójny skok, 4: przeżyjesz upadek.' },
+    { id: 'throw', name: 'Rzut ostrzem', power: true, d: 'Ostrze leci jak bumerang i wraca. Zasięg rośnie.' },
+    { id: 'focus', name: 'Skupienie', d: 'Szybsza regeneracja aury i tańsze moce.' } ] },
+  { name: 'GNIEW', col: '#ff9060', nodes: [
+    { id: 'pull', name: 'Przyciąganie', power: true, d: 'Przyciąga wroga (QTE – szybkie A), przedmioty i drony.' },
+    { id: 'choke', name: 'Uścisk', power: true, d: 'Unosi wroga i dusi go: 1–2 obrażenia. Lord się opiera.' },
+    { id: 'bolt', name: 'Pioruny aury', power: true, d: 'Błyskawice skaczą po 1–4 wrogach i ogłuszają.' } ] },
+];
+const SKN = {};
+SKILLS.forEach((c, ci) => c.nodes.forEach((n, ni) => { SKN[n.id] = n; n.ci = ci; n.ni = ni; }));
+const POWER_COST = { pull: 45, push: 35, shield: 40, trick: 40, heal: 70, throw: 25, choke: 50, bolt: 55 };
+const skl = id => (game.sk && game.sk[id]) || 0;
+const skPts = () => Math.floor(game.crys / 10) - game.spent;
+// Nagroda w kryształach (pokonani wrogowie) – iskierki lecą do licznika
+function addCrys(n, x, y) {
+  game.crys += n;
+  for (let i = 0; i < n * 3; i++) parts.push({ x, y, vx: (Math.random() - 0.5) * 80, vy: -40 - Math.random() * 60,
+    life: 0.7, col: '#80e0ff', e: true, g: 60 });
+}
+function skReset() { game.sk = { pull: 1, push: 1, combo: 1 }; game.slots = ['pull', 'push']; game.spent = 0; }
+function skSnap() { return { sk: Object.assign({}, game.sk), slots: game.slots.slice(), spent: game.spent }; }
+function skCan(n) {
+  const c = SKILLS[n.ci];
+  return skl(n.id) < 4 && skPts() > 0 && (n.ni === 0 || skl(c.nodes[n.ni - 1].id) >= 1);
+}
+function skUp(n) {
+  if (!skCan(n)) {
+    game.tmsg = skl(n.id) >= 4 ? 'Maksymalny poziom.' : skPts() <= 0 ? 'Brak punktów – zbieraj kryształy (10 = 1 punkt).'
+      : 'Najpierw ulepsz: ' + SKILLS[n.ci].nodes[n.ni - 1].name + '.';
+    SND.ui && SND.ui(0); return;
+  }
+  game.sk[n.id] = skl(n.id) + 1; game.spent++;
+  game.tmsg = n.name + ' – poziom ' + game.sk[n.id] + '!';
+  if (n.power && skl(n.id) === 1 && !game.slots.includes(n.id)) game.tmsg += ' Przypisz do Z lub X.';
+  tone(520, 0.08, 'square', 0.05); setTimeout(() => tone(780, 0.12, 'square', 0.05), 70);
+}
+function skSlot(n, s) {
+  if (!n.power) { game.tmsg = 'To zdolność bierna – działa sama.'; return; }
+  if (skl(n.id) < 1) { game.tmsg = 'Najpierw odblokuj tę moc.'; return; }
+  const o = game.slots.indexOf(n.id);
+  if (o >= 0 && o !== s) game.slots[o] = game.slots[s];
+  game.slots[s] = n.id;
+  game.tmsg = n.name + ' → ' + (s ? 'X' : 'Z');
+  tone(660, 0.08, 'triangle', 0.05);
+}
+function openTree() {
+  if (game.mode === 'play' && P && P.st !== 'ship' && P.st !== 'dead') { game.mode = 'tree'; game.tmsg = ''; for (const k in K) K[k] = false; }
+  else if (game.mode === 'tree') game.mode = 'play';
+  updLabels();
+}
+function treeKey(k) {
+  const s = game.tsel, C = SKILLS[s[0]];
+  if (k === 'left' || k === 'right') { s[0] = (s[0] + (k === 'left' ? 2 : 1)) % 3; s[1] = Math.min(s[1], SKILLS[s[0]].nodes.length - 1); }
+  else if (k === 'up') s[1] = (s[1] + C.nodes.length - 1) % C.nodes.length;
+  else if (k === 'down') s[1] = (s[1] + 1) % C.nodes.length;
+  else if (k === 'act') skUp(SKILLS[s[0]].nodes[s[1]]);
+  else if (k === 'pull' || k === 'push') skSlot(SKILLS[s[0]].nodes[s[1]], k === 'pull' ? 0 : 1);
+  else if (k === 'sheathe' || k === 'tree') { game.mode = 'play'; }
+  updLabels();
+}
+// Etykiety przycisków dotykowych Z / X – nazwa mocy w slocie
+function updLabels() {
+  const ab = { pull: 'PRZYC', push: 'ODEP', shield: 'TARCZA', trick: 'OMAM', heal: 'LECZ', throw: 'RZUT', choke: 'UŚCISK', bolt: 'PIORUN' };
+  ['pull', 'push'].forEach((k, i) => {
+    const el = document.querySelector('#acts button[data-k="' + k + '"] small');
+    if (el && game.slots) el.textContent = ab[game.slots[i]] || '';
+  });
+}
+// Drzewko na ekranie dotykowym: stuknięcie węzła = wybór, ponowne = ulepszenie
+function treeTap(e) {
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * SW, y = (e.clientY - r.top) / r.height * SH;
+  if (y > 178) { game.mode = 'play'; return; }
+  for (let ci = 0; ci < 3; ci++) for (let ni = 0; ni < SKILLS[ci].nodes.length; ni++) {
+    const b = treeBox(ci, ni);
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+      if (game.tsel[0] === ci && game.tsel[1] === ni) treeKey('act');
+      else { game.tsel = [ci, ni]; game.tmsg = ''; }
+      return;
+    }
+  }
+}
+const treeBox = (ci, ni) => ({ x: 8 + ci * 104, y: 30 + ni * 30, w: 96, h: 26 });
 
 function say(text, sec) { msg = { text, t: sec || 3 }; }
 
@@ -236,7 +341,7 @@ function mkFoe(f) {
     st: f.sleep ? 'sleep' : f.k === 'lord' ? 'meditate' : 'idle', t: 0, hp, max: hp, alive: true,
     cd: 1.1 + Math.random() * 0.7, vx: 0, vy: 0, air: false, hit: false, shots: 0, ft: 0,
     white: 0, mf: 0, bb: 0, trail: [], aw: false, lost: 0, wait: Math.random(), mv: 0, sd: 0, sdt: 0, fury: false,
-    sty: f.sty, name: f.name, dbl: !!f.dbl, dual: !!f.dual, ph: 0, lv: lordLv(), mark: null, lift: 0,
+    sty: f.sty, name: f.name, dbl: !!f.dbl, dual: !!f.dual, ph: 0, lv: Math.min(4, lordLv()), mark: null, lift: 0,
   };
   if (f.k === 'drone') { o.y = o.hy = f.r * RH + 30; o.ph = Math.random() * 6; }
   return o;
@@ -259,7 +364,7 @@ function mkRoom(R) {
       if (ch !== '#' && ch !== 'D' && ch !== 'G' && floorY(r) - 36 < D.wl) lm.push({ x: c * TW + 16, y: floorY(r) - 36 });
     }
   }
-  const plats = (R.plats || []).map(q => ({ r: q.r, x0: q.c0 * TW + 16, x1: q.c1 * TW + 16, x: q.c0 * TW + 16, v: q.sp, w: 14, dx: 0 }));
+  const plats = (R.plats || []).map(q => ({ r: q.r, x0: q.c0 * TW + 16, x1: q.c1 * TW + 16, x: q.c0 * TW + 16, v: q.sp, w: 26, dx: 0 }));
   return { D, map, foes: (R.foes || []).map(mkFoe), loose, spikes: sp, lamps: lm, plats, mines };
 }
 
@@ -279,6 +384,8 @@ function loadLevel(i) {
   gate = 0; gateT = 0; gateTick = 0;
   game.shake = 0; game.stop = 0; game.hud = null; game.slowT = 0; game.bars = 0; game.qte = null;
   game.crysLvl = game.crys;
+  if (!game.sk) skReset();
+  game.snap = skSnap(); updLabels();
   game.mode = 'play';
   if (LV.ship) {
     // Poziom lotu statkiem – logika w ship.js
@@ -302,12 +409,15 @@ function loadLevel(i) {
   say(drop ? (LV.dropMsg || 'Spadasz z nocnego nieba...') : 'Poziom ' + (i + 1) + ': ' + LV.name, 2.5);
 }
 
-function newGame() { game.maxHp = 3; game.time = 0; game.crys = 0; loadLevel(0); }
+function newGame() { game.maxHp = 3; game.time = 0; game.crys = 0; skReset(); loadLevel(0); }
 function restart() {
   if (game.mode === 'title') { start(); return; }
   if (game.mode === 'win') { newGame(); return; }
   if (game.mode === 'trans') return;
-  game.maxHp = game.lvlMax; game.crys = game.crysLvl; loadLevel(lvl);
+  if (game.mode === 'tree') game.mode = 'play';
+  game.maxHp = game.lvlMax; game.crys = game.crysLvl;
+  if (game.snap) { game.sk = game.snap.sk; game.slots = game.snap.slots; game.spent = game.snap.spent; }
+  loadLevel(lvl);
 }
 function start() {
   audioOn();
@@ -346,6 +456,8 @@ const gateBlocks = (r, c) => cell(r, c) === 'G' && gate < 0.8;
 // Bariera energetyczna pulsuje (2 s włączona, 1,2 s wyłączona); konsola K wyłącza ją na stałe
 const barrierOn = c => !used && ((game.anim + c * 0.37) % 3.2) < 2;
 const barBlocks = (r, c) => cell(r, c) === 'E' && barrierOn(c);
+// Dysza płomieni (Ignis): 0,8 s ognia co 2,4 s, przesunięta w fazie zależnie od kolumny
+const ventOn = c => ((game.anim + c * 0.53) % 2.4) < 0.8;
 const doorOpen = () => !LV.lock || !ROOMS.some(R => R.foes.some(f => f.k === 'lord' && f.alive));
 const inWater = () => RD.wl < 900;
 
@@ -443,7 +555,7 @@ function updDebris(dt) {
 
 // ===== Gracz =====
 const playerOnRow = r => !P.air && P.r === r && P.st !== 'dead' && HANGST.indexOf(P.st) < 0;
-const fightable = f => f.alive && !f.air && f.k !== 'drone' && !['sleep', 'meditate', 'rise', 'knock', 'pulled'].includes(f.st);
+const fightable = f => f.alive && !f.air && f.k !== 'drone' && !['sleep', 'meditate', 'rise', 'knock', 'pulled', 'choke'].includes(f.st);
 
 // Najbliższy przeciwnik, z którym gracz wchodzi w pozycję walki
 function engaged() {
@@ -466,7 +578,7 @@ function die(kind) {
     strzal: 'Strzał z blastera dosięgnął celu.', kolba: 'Żołnierz powalił cię kolbą.',
     lord: 'Mroczny Lord cię pokonał.', gruz: 'Przygniótł cię gruz.', bariera: 'Bariera energetyczna cię poraziła.',
     piasek: 'Ruchome piaski cię wciągnęły.', tlen: 'Zabrakło ci tlenu.', mina: 'Mina głębinowa rozerwała pancerz.',
-    dron: 'Dron bojowy cię staranował.' };
+    dron: 'Dron bojowy cię staranował.', lawa: 'Lawa cię pochłonęła.', ogien: 'Płomienie z kratki cię spaliły.' };
   const L = ROOMS.length && ROOMS.flatMap(R => R.foes).find(f => f.k === 'lord');
   if (L) t.lord = lordName(L) + ' wygrywa ten pojedynek.';
   say(t[kind] || 'Zginąłeś.', 99);
@@ -474,6 +586,10 @@ function die(kind) {
 
 function hurtPlayer(n, pushDir, kind) {
   if (P.st === 'dead' || P.inv > 0) return;
+  if (P.sh > 0 && (kind === 'kolba' || kind === 'dron' || kind === 'strzal')) {
+    P.sh = 0; P.inv = 0.4; SND.deflect(); burst(P.x, P.y - 18, 14, '#80c0ff', 90, 60, true);
+    say('Tarcza aury pochłania cios.', 1); return;
+  }
   P.hp -= n; P.inv = 0.8;                     // krótka nietykalność – seria nie zabija od razu
   flash = { col: '#ff0000', t: 0.12 };
   SND.hit(); shake(2);
@@ -487,6 +603,7 @@ function hurtPlayer(n, pushDir, kind) {
 
 function startFall(vx) {
   P.st = 'fall'; P.t = 0; P.air = true; P.vy = 0; P.vx = vx; P.fallY = floorY(P.r);
+  P.coy = 0.12; P.lvx = vx; P.dj = skl('agil') >= 3;      // „czas kojota” – skok tuż po zejściu z krawędzi
 }
 
 // Porażenie barierą energetyczną – odrzut i utrata życia
@@ -506,31 +623,81 @@ function groundCheck(running) {
   return true;
 }
 
+// Skok: wyższy i dalszy niż dawniej; Zwinność wydłuża go o 8% na poziom
 function jump(vx) {
-  P.st = 'jump'; P.t = 0; P.air = true;
-  P.vx = P.dir * vx; P.vy = -165; P.fallY = floorY(P.r);
+  const k = 1 + skl('agil') * 0.08;
+  P.st = 'jump'; P.t = 0; P.air = true; P.coy = 0; P.jb = 0;
+  const v = vx === 90 ? 100 : vx === 130 ? 145 : vx;
+  P.vx = P.dir * v * k; P.lvx = P.vx; P.vy = -175 - skl('agil') * 4; P.fallY = floorY(P.r);
+  P.dj = skl('agil') >= 3;
   SND.swing();
+}
+// Podwójny skok (Zwinność 3) – w powietrzu ↑
+function airJump() {
+  P.dj = false; P.vy = -165; P.st = 'jump'; P.t = 0;
+  P.fallY = Math.min(P.fallY, P.y);
+  burst(P.x, P.y, 8, '#a8d8ff', 50, 10, true); SND.swing();
+}
+// Chwyt krawędzi w locie – gdy skok był za krótki albo za niski
+function ledgeGrab() {
+  if (inWater()) return false;
+  const d = Math.sign(P.vx) || P.dir, c = colOf(P.x);
+  for (let r = 0; r < ROWS; r++) {
+    const hy = floorY(r) + HANG_DY;
+    if (Math.abs(P.y - hy) > 12 || P.vy < 0 || P.fallY > floorY(r) + 5) continue;
+    if (hasFloor(r, c) || isWall(r, c) || !hasFloor(r, c + d) || isWall(r, c + d)) continue;
+    const ex = d > 0 ? (c + 1) * TW : c * TW;
+    if (Math.abs(ex - P.x) > 14) continue;
+    P.dir = d; P.hang = { r, ex }; P.air = false; P.vx = P.vy = 0; P.as = 0;
+    P.x = ex - d * HW; P.y = hy; P.r = r; P.st = 'hang'; P.t = 0;
+    SND.thud(); burst(ex, floorY(r), 5, '#a89878', 30, 10);
+    return true;
+  }
+  return false;
+}
+// Cięcie w powietrzu – drony i wrogowie na wysokości ostrza
+function airStrike() {
+  const by = P.y - 16;
+  for (const f of FOES) {
+    if (!f.alive || ['fin', 'fdead', 'ffall', 'gone'].includes(f.st)) continue;
+    const fy = isDrone(f) ? f.y : f.y - 20, dx = (f.x - P.x) * P.dir;
+    if (dx < -6 || dx > 32 || Math.abs(fy - by) > 24) continue;
+    if (f.k === 'lord' && (f.st === 'guard' || f.st === 'gblock') && Math.random() < 0.5) {
+      f.st = 'gblock'; f.t = 0; SND.clash(); sparks((f.x + P.x) / 2, by, RED.col, 8); return;
+    }
+    if (hitFoe(f, 1, P.dir) && f.st === 'fin' && !isDrone(f)) game.slowT = 0.6;
+    return;
+  }
 }
 
 function landP(r) {
   const rows = Math.round((floorY(r) - P.fallY) / RH);
-  const c = colOf(P.x);
-  P.vx = 0; P.vy = 0; P.st = 'land'; P.t = 0;
+  const c = colOf(P.x), ag = skl('agil');
+  P.vx = 0; P.vy = 0; P.st = 'land'; P.t = 0; P.as = 0;
   if (r >= ROWS) { die('upadek'); return; }
   if (cell(r, c) === 'S') { spikes[r + ',' + c] = 1; die('kolce'); return; }
+  if (cell(r, c) === 'V') { die('lawa'); return; }
   burst(P.x, P.y, 6, '#a89878', 40, 20);
   if (P.soft) {
     P.soft = false; P.ld = 0.9; SND.thud(); shake(2);
     say(lvl === 0 ? 'Dach cytadeli... Gdzieś tu musi leżeć rękojeść ostrza.'
-      : 'Piasek złagodził upadek. Ostrze wciąż przy pasie.', 4);
+      : 'Miękkie lądowanie. Ostrze wciąż przy pasie.', 4);
+    return;
+  }
+  if (rows >= 3 && ag >= 4) {
+    P.hp--; P.ld = 0.8; SND.thud(); shake(3); flash = { col: '#ff0000', t: 0.12 };
+    if (P.hp <= 0) die('upadek'); else say('Przewrót! Zwinność uratowała ci życie.', 2);
     return;
   }
   if (rows >= 3) { die('upadek'); return; }
-  if (rows === 2) {
+  if (rows === 2 && ag >= 2) { P.ld = 0.35; SND.thud(); burst(P.x, P.y, 8, '#a8d8ff', 40, 20, true); }
+  else if (rows === 2) {
     P.hp--; P.ld = 0.8; SND.thud(); SND.hit(); shake(2); flash = { col: '#ff0000', t: 0.12 };
     if (P.hp <= 0) die('upadek'); else say('Auć! Twardy upadek.', 2);
-  } else if (rows === 1) { P.ld = 0.4; SND.thud(); }
-  else P.ld = 0.08;
+  } else if (rows === 1) { P.ld = 0.3; SND.thud(); }
+  else P.ld = 0.06;
+  // Bufor skoku: ↑ wciśnięte tuż przed lądowaniem → od razu kolejny skok
+  if (P.jb > 0 && P.st === 'land' && rows <= 1 && K[P.dir > 0 ? 'right' : 'left']) jump(K.walk ? 90 : 130);
 }
 
 function tryUp() {
@@ -621,7 +788,7 @@ const afterFight = () => (engaged() || P.drawn) ? 'fight' : 'stand';
 
 function startStrike(chain) {
   const p = P;
-  p.combo = chain ? p.combo ^ 1 : 0;
+  p.combo = chain ? p.combo + 1 : 0;
   p.st = 'strike'; p.t = 0; p.hit = false; p.q = false;
   SND.swing();
   const t = engaged();
@@ -656,18 +823,157 @@ function startFinisher(f, fv) {
 const AURAST = ['stand', 'run', 'step', 'turn', 'fight', 'fstep', 'land', 'crouch', 'swim'];
 const bodyY = () => P.st === 'swim' ? P.y : P.y - 18;
 const isDrone = f => f.k === 'drone';
-const pullable = f => f.alive && !['fin', 'fdead', 'ffall', 'gone', 'pulled', 'meditate', 'rise'].includes(f.st);
+const pullable = f => f.alive && !['fin', 'fdead', 'ffall', 'gone', 'pulled', 'meditate', 'rise', 'choke'].includes(f.st);
+const PNAME = { pull: 'Przyciąganie', push: 'Odepchnięcie', shield: 'Tarcza', trick: 'Omamienie', heal: 'Uzdrowienie',
+  throw: 'Rzut ostrzem', choke: 'Uścisk', bolt: 'Pioruny' };
+const pullRange = () => [80, 80, 110, 140, 170][skl('pull')];
+const pushRange = () => [70, 70, 95, 120, 145][skl('push')];
+const powerCost = k => Math.round(POWER_COST[k] * (1 - 0.1 * skl('focus')));
 
 function usePower(kind) {
+  if (!kind) return false;
   if (!P.sword) { say('Aura budzi się dopiero z ostrzem w dłoni.', 1.5); return false; }
-  const cost = kind === 'pull' ? 45 : 35;
+  if (skl(kind) < 1) { say(PNAME[kind] + ' – moc jeszcze zablokowana (U – drzewko).', 1.5); return false; }
+  if (kind === 'throw' && P.thr) return false;
+  if (kind === 'heal' && P.hp >= P.max) { say('Jesteś w pełni sił.', 1); return false; }
+  if (kind === 'shield' && P.sh > 0) return false;
+  const cost = powerCost(kind);
   if (P.aura < cost) { say('Za mało aury – odczekaj chwilę.', 1); SND.click(); return false; }
-  P.aura -= cost;
+  P.aura -= cost; P.pk = kind;
   if (P.st === 'swim') P.pw = 0.35; else { P.st = 'power'; P.t = 0; }
-  WAVES.push({ x: P.x + P.dir * 8, y: bodyY(), dir: P.dir, t: 0, k: kind });
-  tone(kind === 'pull' ? 520 : 260, 0.35, 'sine', 0.05, kind === 'pull' ? 160 : 700);
-  if (kind === 'push') auraPush(); else auraPull();
+  const by = bodyY(), d = P.dir, lv = skl(kind);
+  if (kind === 'pull' || kind === 'push') {
+    WAVES.push({ x: P.x + d * 8, y: by, dir: d, t: 0, k: kind, rg: kind === 'pull' ? pullRange() : pushRange() });
+    tone(kind === 'pull' ? 520 : 260, 0.35, 'sine', 0.05, kind === 'pull' ? 160 : 700);
+    if (kind === 'push') auraPush(); else auraPull();
+  } else if (kind === 'bolt') auraBolt(lv);
+  else if (kind === 'choke') auraChoke(lv);
+  else if (kind === 'shield') {
+    P.sh = 1 + lv; P.shMax = P.sh;
+    tone(330, 0.4, 'sine', 0.05, 660); burst(P.x, by, 12, '#80c0ff', 60, 40, true);
+    say(lv >= 3 ? 'Tarcza aury – odbija strzały!' : 'Tarcza aury – łapie strzały.', 1.2);
+  } else if (kind === 'trick') auraTrick(lv);
+  else if (kind === 'heal') {
+    const n = lv >= 4 ? 2 : 1;
+    P.hp = Math.min(P.max, P.hp + n); SND.drink();
+    flash = { col: '#60ff90', t: 0.2 };
+    for (let i = 0; i < 14; i++) parts.push({ x: P.x + (Math.random() - 0.5) * 14, y: P.y - Math.random() * 30,
+      vx: 0, vy: -20 - Math.random() * 30, life: 0.8, col: '#80ffa0', e: true, g: -10 });
+    say('Uzdrowienie: +' + n + ' życie', 1.2);
+  } else if (kind === 'throw') {
+    P.thr = { x: P.x + d * 10, y: by - 2, dir: d, d: 0, max: 60 + 30 * lv, back: false, hit: [], t: 0, a: 0 };
+    tone(180, 0.3, 'sawtooth', 0.04, 90); SND.swing();
+  }
   return true;
+}
+
+// Cele mocy „przed graczem”: przeciwnicy w zasięgu, na tym samym rzędzie i w linii (drony – w powietrzu)
+function auraTargets(range, back) {
+  const by = bodyY(), d = P.dir, sw = P.st === 'swim', out = [];
+  for (const f of FOES) {
+    if (!pullable(f)) continue;
+    const dx = (f.x - P.x) * d;
+    if (dx < (back ? -range * 0.5 : -6) || dx > range) continue;
+    if (isDrone(f)) { if (Math.abs(f.y - by) > 24 + Math.abs(dx) * 0.3) continue; }
+    else if (sw || f.r !== P.r || f.air || !los(P.r, P.x, f.x)) continue;
+    out.push(f);
+  }
+  return out.sort((a, b) => Math.abs(a.x - P.x) - Math.abs(b.x - P.x));
+}
+
+// Pioruny aury – łańcuch błyskawic po 1–4 celach, ogłuszają
+function auraBolt(lv) {
+  const T = auraTargets(90 + 25 * lv).slice(0, lv);
+  const pts = [[P.x + P.dir * 8, bodyY() - 4]];
+  tone(90, 0.45, 'sawtooth', 0.07, 60); tone(1800, 0.3, 'square', 0.025, 400);
+  flash = { col: '#a0c0ff', t: 0.1 }; shake(2);
+  if (!T.length) {
+    pts.push([P.x + P.dir * 60, bodyY() + 6]);
+    WAVES.push({ k: 'bolt', t: 0, pts });
+    return;
+  }
+  for (const f of T) {
+    const fy = isDrone(f) ? f.y : f.y - 20;
+    pts.push([f.x, fy]);
+    sparks(f.x, fy, '#a0c0ff', 10);
+    f.aw = true;
+    if (f.k === 'lord') {
+      if (Math.random() < 0.45 - 0.05 * lv) {
+        f.st = 'gblock'; f.t = 0; f.dir = -P.dir; SND.clash();
+        say(lordName(f) + ' łapie pioruny na ostrze!', 1.5); continue;
+      }
+      if (!hitFoe(f, 1, P.dir)) { f.st = 'stun'; f.t = -0.2; }
+      else if (f.st === 'fin') game.slowT = 1;
+    } else {
+      const dead = hitFoe(f, 1, P.dir);
+      if (!dead && !isDrone(f)) { f.st = 'tstun'; f.t = -0.4 - 0.2 * lv; }
+    }
+  }
+  WAVES.push({ k: 'bolt', t: 0, pts });
+}
+
+// Uścisk – unosi najbliższego wroga i dusi go
+function auraChoke(lv) {
+  const f = auraTargets(70 + 20 * lv).find(o => !isDrone(o));
+  tone(110, 0.6, 'triangle', 0.06, 70);
+  if (!f) { say('Brak celu dla uścisku.', 1); return; }
+  f.aw = true;
+  if (f.k === 'lord' && Math.random() < 0.6 - 0.1 * lv) {
+    f.st = 'gblock'; f.t = 0; sparks(f.x, f.y - 30, RED.col, 10); SND.clash();
+    say(lordName(f) + ' wyrywa się z uścisku!', 1.5); return;
+  }
+  f.st = 'choke'; f.t = 0; f.cn = lv >= 3 ? 2 : 1; f.cd2 = f.k === 'lord' ? 0.8 : 1.2; f.lift = 0;
+  if (game.qte && game.qte.f === f) game.qte = null;
+}
+
+// Omamienie – żołnierze tracą wątek i stoją oszołomieni
+function auraTrick(lv) {
+  const rg = 80 + 25 * lv;
+  let n = 0;
+  tone(700, 0.5, 'sine', 0.035, 900); tone(470, 0.5, 'sine', 0.035, 600);
+  for (const f of FOES) {
+    if (!pullable(f) || Math.abs(f.x - P.x) > rg) continue;
+    if (isDrone(f)) { if (Math.abs(f.y - bodyY()) < 60) { f.st = 'idle'; f.hx = f.x; f.hy = f.y; f.mark = { s: '?', t: 1.5 }; n++; } continue; }
+    if (f.r !== P.r) continue;
+    if (f.k === 'lord') { say(lordName(f) + ' śmieje się z twoich sztuczek.', 1.5); continue; }
+    f.st = 'tstun'; f.t = -(1.2 + 0.6 * lv); f.mark = { s: '?', t: 1.2 + 0.6 * lv }; n++;
+    for (let i = 0; i < 6; i++) burst(f.x, f.y - 34, 1, '#e0c0ff', 30, 20, true);
+  }
+  WAVES.push({ x: P.x, y: bodyY(), dir: P.dir, t: 0, k: 'trick', rg });
+  if (n) say('Omamienie: „To nie jest ten, kogo szukacie.”', 1.8);
+}
+
+// Lecące ostrze – bumerang; trafia każdego wroga raz w jedną stronę
+function updThrow(dt) {
+  const q = P.thr;
+  if (!q) return;
+  q.t += dt; q.a += dt * 26;
+  const sp = 250;
+  if (!q.back) {
+    const nx = q.x + q.dir * sp * dt;
+    const r = Math.max(0, Math.min(ROWS - 1, Math.floor(q.y / RH)));
+    q.d += sp * dt;
+    if (q.d >= q.max || isWall(r, colOf(nx)) || nx < -10 || nx > SW + 10) { q.back = true; q.hit = []; sparks(q.x, q.y, game.blade.col, 4); }
+    else q.x = nx;
+  } else {
+    const ty = bodyY() - 2, dx = P.x - q.x, dy = ty - q.y, dd = Math.hypot(dx, dy) || 1;
+    q.x += dx / dd * sp * 1.1 * dt; q.y += dy / dd * sp * 1.1 * dt;
+    if (dd < 10 || q.t > 3 || P.st === 'dead') { P.thr = null; SND.click(); return; }
+  }
+  if (Math.random() < 0.6) parts.push({ x: q.x, y: q.y, vx: 0, vy: 0, life: 0.15, col: game.blade.col, e: true });
+  for (const f of FOES) {
+    if (!f.alive || q.hit.includes(f) || ['fin', 'fdead', 'ffall', 'gone', 'sleep', 'meditate'].includes(f.st)) continue;
+    const fy = isDrone(f) ? f.y : f.y - 20;
+    if (Math.abs(f.x - q.x) > 12 || Math.abs(fy - q.y) > 18) continue;
+    q.hit.push(f);
+    if (f.k === 'lord' && f.st !== 'stun' && f.st !== 'ghurt' && Math.random() < 0.55) {
+      f.st = 'gblock'; f.t = 0; f.aw = true; SND.clash();
+      sparks(q.x, q.y, RED.col, 10); q.back = true; continue;
+    }
+    hitFoe(f, 1, q.back ? -q.dir : q.dir);
+  }
+  for (const b of BOLTS) if (b.o === 'e' && Math.abs(b.x - q.x) < 10 && Math.abs(b.y - q.y) < 10) { b.dead = true; sparks(b.x, b.y, '#ff6040', 5); }
+  if (Math.floor(q.t * 8) !== Math.floor((q.t - dt) * 8)) tone(200, 0.06, 'sawtooth', 0.02, 260);
 }
 
 function auraPush() {
@@ -676,7 +982,7 @@ function auraPush() {
   for (const f of FOES) {
     if (!pullable(f)) continue;
     const dx = (f.x - P.x) * d;
-    if (dx < -4 || dx > 120) continue;
+    if (dx < -4 || dx > pushRange()) continue;
     if (isDrone(f)) {
       if (Math.abs(f.y - by) > 30) continue;
       f.vx = d * 220; f.st = 'back'; f.t = 0; n++;
@@ -696,10 +1002,10 @@ function auraPush() {
   }
   // Strzały wracają do strzelców, miny eksplodują, skrzynie pękają
   for (const b of BOLTS) {
-    if (b.o !== 'e' || Math.abs(b.x - P.x) > 100 || Math.abs(b.y - by) > 30) continue;
+    if (b.o !== 'e' || Math.abs(b.x - P.x) > pushRange() - 20 || Math.abs(b.y - by) > 30) continue;
     b.vx = d * Math.abs(b.vx) * 1.15; b.o = 'p'; SND.deflect(); n++;
   }
-  for (const m of MINES) if (m.alive && Math.hypot(m.x - P.x, m.y - by) < 110 && (m.x - P.x) * d > -10) { mineBoom(m, false); n++; }
+  for (const m of MINES) if (m.alive && Math.hypot(m.x - P.x, m.y - by) < pushRange() - 10 && (m.x - P.x) * d > -10) { mineBoom(m, false); n++; }
   if (P.st !== 'swim') for (let c = 0; c < COLS; c++) {
     if (cell(P.r, c) !== 'B') continue;
     const dx = (c * TW + 16 - P.x) * d;
@@ -714,14 +1020,14 @@ function auraPull() {
   for (const f of FOES) {
     if (!pullable(f)) continue;
     const dx = (f.x - P.x) * d;
-    if (dx < 10 || dx > 150) continue;
+    if (dx < 10 || dx > pullRange()) continue;
     if (isDrone(f)) { if (Math.abs(f.y - by) > 20 + dx * 0.3) continue; }
     else if (sw || f.r !== P.r || f.air || !los(P.r, P.x, f.x)) continue;
     if (dx < bd) { bd = dx; best = f; }
   }
   if (!best) {
     // Bez celu – przyciągnij kryształ lub miksturę z odległości do 4 kafli
-    if (!sw) for (let i = 1; i <= 4; i++) {
+    if (!sw) for (let i = 1; i <= Math.min(4, 1 + skl('pull')); i++) {
       const c = colOf(P.x) + d * i, ch = cell(P.r, c);
       if (isWall(P.r, c)) break;
       if ((ch === 'O' || ch === 'H') && c >= 0 && c < COLS) {
@@ -962,13 +1268,15 @@ function updPlayer(dt) {
   const p = P;
   p.t += dt;
   p.inv = Math.max(0, p.inv - dt);
-  p.aura = Math.min(100, p.aura + 18 * dt);
+  p.aura = Math.min(100, p.aura + [18, 22, 26, 30, 36][skl('focus')] * dt);
+  p.sh = Math.max(0, (p.sh || 0) - dt);
+  updThrow(dt);
   updO2(p, dt);
   // Woda: wejście z lotu albo zanurzenie przy chodzeniu
   if (inWater() && p.st !== 'swim' && p.st !== 'dead' && p.st !== 'exit' && HANGST.indexOf(p.st) < 0 &&
       (p.air ? p.y > RD.wl + 6 : p.y - 16 > RD.wl)) startSwim();
   if (p.st === 'swim') {
-    if ((PR.pull || PR.push) && p.pw <= 0) usePower(PR.pull ? 'pull' : 'push');
+    if ((PR.pull || PR.push) && p.pw <= 0) usePower(game.slots[PR.pull ? 0 : 1]);
     updSwim(p, dt);
     return;
   }
@@ -979,14 +1287,34 @@ function updPlayer(dt) {
     if (p.sink > 0.3 && Math.random() < dt * 6) burst(p.x, p.y, 1, '#c8a060', 30, 20);
     if (p.sink >= 2) { die('piasek'); return; }
   } else p.sink = Math.max(0, p.sink - dt * 2);
-  if ((PR.pull || PR.push) && AURAST.includes(p.st)) { if (usePower(PR.pull ? 'pull' : 'push')) return; }
+  if ((PR.pull || PR.push) && AURAST.includes(p.st)) { if (usePower(game.slots[PR.pull ? 0 : 1])) return; }
+  // Lawa / płomienie (Ignis)
+  if (!p.air && p.st !== 'dead' && HANGST.indexOf(p.st) < 0) {
+    const ch = cell(p.r, colOf(p.x));
+    if (ch === 'V') { die('lawa'); return; }
+    if (ch === 'F' && ventOn(colOf(p.x)) && p.inv <= 0) hurtPlayer(1, -p.dir, 'ogien');
+  }
+  // Lód (Krio) – poślizg po zatrzymaniu
+  if (!p.air && (p.st === 'stand' || p.st === 'fight') && Math.abs(p.slide || 0) > 2 && cell(p.r, colOf(p.x)) === 'I') {
+    moveX(p, p.slide * dt, p.r); p.slide *= Math.pow(0.15, dt);
+    if (Math.random() < dt * 12) burst(p.x, p.y, 1, '#e0f4ff', 20, 10);
+    if (!groundCheck(true)) return;
+  } else if (p.st !== 'run') p.slide = 0;
+  // Wyrzutnia (Verdan) – wysoki skok
+  if (!p.air && p.st === 'stand' && cell(p.r, colOf(p.x)) === 'J' && Math.abs(colOf(p.x) * TW + 16 - p.x) < 10 && PR.up) {
+    p.st = 'jump'; p.t = 0; p.air = true; p.vx = (K.right ? 1 : K.left ? -1 : 0) * 70; p.vy = -300; p.fallY = floorY(p.r) - RH;
+    p.lvx = p.vx; p.dj = skl('agil') >= 3; p.soft = true;
+    burst(p.x, p.y, 14, '#80ff90', 80, 60, true); tone(200, 0.3, 'square', 0.05, 900);
+    return;
+  }
   // Podłoga zniknęła pod stojącym graczem (luźna płyta)
   if (!p.air && p.st !== 'dead' && p.st !== 'exit' && HANGST.indexOf(p.st) < 0 && !floorAt(p.r, p.x)) {
     startFall(0);
   }
   const fwd = p.dir > 0 ? K.right : K.left, back = p.dir > 0 ? K.left : K.right;
-  if (p.air || p.st === 'dead') p.drawn = false;
-  const lit = p.sword && (FIGHTST.includes(p.st) || (p.st === 'hurt' && (p.drawn || engaged())));
+  if (p.st === 'dead' || HANGST.indexOf(p.st) >= 0) p.drawn = false;
+  const lit = p.sword && !p.thr && (FIGHTST.includes(p.st) || (p.st === 'hurt' && (p.drawn || engaged())) ||
+    (p.drawn && ['jump', 'fall', 'land', 'power'].includes(p.st)) || (p.as > 0));
   p.ign = Math.max(0, Math.min(1, p.ign + (lit ? 3.6 : -3) * dt));   // ostrze wysuwa się ~0,28 s, chowa ~0,33 s
   // Kryształ zbierany w biegu
   if (!p.air && p.st !== 'dead' && HANGST.indexOf(p.st) < 0 && cell(p.r, colOf(p.x)) === 'O' &&
@@ -998,7 +1326,7 @@ function updPlayer(dt) {
 
   switch (p.st) {
     case 'stand': {
-      if (p.sword && engaged()) { toFight(); break; }
+      if (p.sword && (engaged() || (p.drawn && !p.thr))) { toFight(); break; }
       if (PR.up) {
         if (atDoor()) {
           if (doorOpen()) { p.st = 'exit'; p.t = 0; SND.win(); }
@@ -1014,7 +1342,7 @@ function updPlayer(dt) {
         p.st = 'crouch'; p.t = 0; break;
       }
       if (PR.act && (tryPick() || tryUse())) break;
-      if (PR.act && p.sword) { drawStrike(); break; }   // A – wyciągnięcie ostrza i od razu cios
+      if (PR.act && p.sword && !p.thr) { drawStrike(); break; }   // A – wyciągnięcie ostrza i od razu cios
       if (back) { p.dir = -p.dir; p.st = 'turn'; p.t = 0; break; }
       if (fwd && !foeAhead(p.dir)) { p.st = K.walk ? 'step' : 'run'; p.t = 0; }
       break;
@@ -1024,18 +1352,19 @@ function updPlayer(dt) {
     case 'run': {
       const t = p.sword && engaged();
       if (t && Math.abs(t.x - p.x) < 60) { toFight(); break; }
-      if (PR.act && p.sword) { drawStrike(); break; }
+      if (PR.act && p.sword && !p.thr) { drawStrike(); break; }
       if (PR.up) { jump(130); break; }
       if (back) { p.dir = -p.dir; p.st = 'turn'; p.t = 0; break; }
-      if (!fwd || K.walk || foeAhead(p.dir)) { p.st = 'stand'; break; }
+      if (!fwd || K.walk || foeAhead(p.dir)) { p.st = 'stand'; if (cell(p.r, colOf(p.x)) === 'I') p.slide = p.dir * 60; break; }
       if (PR.down) { p.st = 'crouch'; p.t = 0; break; }
-      moveX(p, p.dir * 64 * (onQ ? 0.6 : 1) * dt, p.r);
-      p.ph += 64 * (onQ ? 0.6 : 1) * dt / 26;
+      const ice = cell(p.r, colOf(p.x)) === 'I' ? 1.15 : 1;
+      moveX(p, p.dir * 64 * ice * (onQ ? 0.6 : 1) * dt, p.r);
+      p.ph += 64 * ice * (onQ ? 0.6 : 1) * dt / 26;
       groundCheck(true);
       break;
     }
     case 'step': {
-      if (PR.act && p.sword) { drawStrike(); break; }
+      if (PR.act && p.sword && !p.thr) { drawStrike(); break; }
       if (p.t < 0.45) {
         const nx = p.x + p.dir * 22 * (onQ ? 0.6 : 1) * dt;
         const aNow = colOf(p.x + p.dir * 4), aNext = colOf(nx + p.dir * 4);
@@ -1064,7 +1393,7 @@ function updPlayer(dt) {
     }
     case 'hang':
       if (PR.up || (K.up && p.t > 0.15)) { p.st = 'climb'; p.t = 0; }
-      else if (PR.down || PR.act) { p.st = 'fall'; p.t = 0; p.air = true; p.vx = 0; p.vy = 0; p.fallY = floorY(p.hang.r); }
+      else if (PR.down || PR.act) { p.st = 'fall'; p.t = 0; p.air = true; p.vx = 0; p.vy = 0; p.fallY = floorY(p.hang.r); p.lvx = 0; p.dj = false; p.gr = 0.3; }
       break;
     case 'climb':
       if (p.t >= 0.6) {
@@ -1112,9 +1441,11 @@ function updPlayer(dt) {
         else say('Drzwi blokuje pole siłowe Lorda.', 2);
         break;
       }
-      if (PR.act) { startStrike(false); break; }
-      if (PR.up) { p.st = 'block'; p.t = 0; break; }
+      if (PR.act && !p.thr) { startStrike(false); break; }
       const f = p.dir > 0 ? K.right : K.left, b = p.dir > 0 ? K.left : K.right;
+      // ↑ + kierunek – skok z wyciągniętym ostrzem; samo ↑ – blok
+      if (PR.up && (f || b)) { if (b && !t) p.dir = -p.dir; jump(f || !t ? 120 : -100); break; }
+      if (PR.up) { p.st = 'block'; p.t = 0; break; }
       if (!t && (p.dir > 0 ? PR.left : PR.right)) { p.dir = -p.dir; break; }   // bez przeciwnika – obrót
       if (f || b) { p.st = 'fstep'; p.t = 0; p.fd = f ? 1 : -1; }
       break;
@@ -1127,16 +1458,21 @@ function updPlayer(dt) {
         p.ph += p.fd * 52 * dt / 16;
         if (!groundCheck(false)) break;
       }
-      if (PR.act) { startStrike(false); break; }
+      if (PR.act && !p.thr) { startStrike(false); break; }
       if (p.t > 0.22) p.st = afterFight();
       break;
     }
-    case 'strike':
+    case 'strike': {
+      // Seria: 2–5 ciosów zależnie od „Kombinacji”; młyniec (4.) i pchnięcie (5.) są wolniejsze
+      const big = p.combo >= 3, hitT = big ? 0.16 : 0.12, end = big ? 0.42 : 0.34;
+      if (p.combo === 3) moveX(p, p.dir * 20 * dt, p.r);
+      if (p.combo === 4 && p.t > 0.08 && p.t < 0.18) { moveX(p, p.dir * 80 * dt, p.r); if (!groundCheck(false)) break; }
       if (PR.act && p.t > 0.1) p.q = true;
-      if (!p.hit && p.t >= 0.12) { p.hit = true; resolveStrike(); }
-      if (p.q && p.t >= 0.24) { startStrike(true); break; }
-      if (p.t > 0.34) p.st = afterFight();
+      if (!p.hit && p.t >= hitT) { p.hit = true; resolveStrike(); }
+      if (p.q && p.t >= hitT + 0.12 && p.combo < skl('combo')) { startStrike(true); break; }
+      if (p.t > end) p.st = afterFight();
       break;
+    }
     case 'block': if (p.t > 0.4) p.st = afterFight(); break;
     case 'power': if (p.t > 0.35) p.st = afterFight(); break;
     case 'fin': {
@@ -1163,6 +1499,26 @@ function updPlayer(dt) {
     case 'hurt': if (p.t > 0.3) p.st = p.sword ? afterFight() : 'stand'; break;
     case 'jump':
     case 'fall': {
+      p.coy = (p.coy || 0) - dt; p.jb = (p.jb || 0) - dt; p.as = Math.max(0, (p.as || 0) - dt); p.gr = (p.gr || 0) - dt;
+      if (PR.up) {
+        if (p.st === 'fall' && p.coy > 0 && p.vy < 80) { jump(K.walk ? 90 : (K.left || K.right) ? 130 : 60); break; }
+        if (p.dj && p.t > 0.08) airJump();
+        else p.jb = 0.18;
+      }
+      // Sterowanie w locie: lekka korekta wokół prędkości wybicia
+      const want = K.right ? 1 : K.left ? -1 : 0;
+      if (want) {
+        const lo = p.lvx - 45, hi = p.lvx + 45;
+        p.vx = Math.max(lo, Math.min(hi, p.vx + want * 260 * dt));
+        if (Math.sign(want) !== p.dir && p.lvx === 0) p.dir = want;
+      }
+      // Cięcie w powietrzu (odbija strzały)
+      if (PR.act && p.sword && !p.thr && p.as <= 0) {
+        p.as = 0.28; p.drawn = true; p.ign = Math.max(p.ign, 0.05); SND.swing(); p.ahit = false;
+      }
+      if (p.as > 0 && !p.ahit && p.as < 0.2) { p.ahit = true; airStrike(); }
+      // Chwyt krawędzi w locie
+      if (p.vy > -40 && p.gr <= 0 && ledgeGrab()) break;
       const r = air(p, dt);
       if (r >= 0) landP(r);
       break;
@@ -1199,7 +1555,7 @@ function resolveStrike() {
     t.cd = Math.min(t.cd, 0.15);
     return;
   }
-  if (hitFoe(t, 1, P.dir) && t.st === 'fin') startFinisher(t);
+  if (hitFoe(t, P.combo === 4 ? 2 : 1, P.dir) && t.st === 'fin') startFinisher(t);
 }
 
 // Zwraca true, gdy cios był śmiertelny
@@ -1212,7 +1568,7 @@ function hitFoe(f, n, dir) {
       f.alive = false; f.st = 'gone'; f.t = 0;
       burst(f.x, f.y, 18, '#ffb060', 140, 100, true); burst(f.x, f.y, 8, '#60e0ff', 90, 80, true);
       for (let i = 0; i < 3; i++) debris(f.x, f.y, f.r, (Math.random() - 0.5) * 160, -60 - Math.random() * 80, 3, '#2a3440', 0.5);
-      SND.crash(); say('Dron zniszczony.', 1.2);
+      SND.crash(); say('Dron zniszczony. +1 ◆', 1.2); addCrys(1, f.x, f.y);
       return true;
     }
     f.st = 'back'; f.t = 0; f.vx = dir * 120;
@@ -1225,8 +1581,8 @@ function hitFoe(f, n, dir) {
     if (f.k === 'lord') {
       say(lordName(f) + ' – pojedynek wygrany! Pole siłowe gaśnie.', 4);
       SND.lord(); shake(4); flash = { col: '#ffffff', t: 0.3 };
-      sparks(f.x, f.y - 30, RED.col, 30);
-    } else say(f.k === 'rifle' ? 'Szturmowiec z karabinem pokonany.' : 'Strażnik z blasterem pokonany.', 2);
+      sparks(f.x, f.y - 30, RED.col, 30); addCrys(10, f.x, f.y - 30);
+    } else { say((f.k === 'rifle' ? 'Szturmowiec z karabinem pokonany.' : 'Strażnik z blasterem pokonany.') + ' +2 ◆', 2); addCrys(2, f.x, f.y - 20); }
     foePush(f, dir * 6);
     if (f.st === 'fdead') {
       // Upadek zamiast natychmiastowej śmierci; broń szturmowca rozcięta na pół
@@ -1261,7 +1617,7 @@ function foePush(f, dx) {
 function foeMove(f, dx) {
   const s = Math.sign(dx), c = colOf(f.x + dx + s * 8);
   if (c < 0 || c >= COLS) return false;
-  if (isWall(f.r, c) || !hasFloor(f.r, c) || 'SEQ'.includes(cell(f.r, c)) || gateBlocks(f.r, c)) return false;
+  if (isWall(f.r, c) || !hasFloor(f.r, c) || 'SEQVF'.includes(cell(f.r, c)) || gateBlocks(f.r, c)) return false;
   if (s === Math.sign(P.x - f.x) && playerOnRow(f.r) && Math.abs(P.x - f.x) < 16) return false;
   if (FOES.some(o => o !== f && o.alive && !o.air && !isDrone(o) && o.r === f.r && Math.sign(o.x - f.x) === s && Math.abs(o.x - f.x) < 18)) return false;
   f.mv = 0.12;
@@ -1289,6 +1645,18 @@ function updFoe(f, dt) {
   f.mv = Math.max(0, f.mv - dt);
   if (f.mark && (f.mark.t -= dt) <= 0) f.mark = null;
   if (f.st === 'pulled') return;
+  if (f.st === 'choke') {
+    // Uścisk: unoszenie, szamotanina, po chwili obrażenia i upadek
+    f.lift = Math.min(14, f.t * 30) + Math.sin(f.t * 30) * (f.t > 0.4 ? 1 : 0);
+    if (Math.random() < dt * 10) burst(f.x, f.y - 30 - f.lift, 1, '#c090ff', 20, 15, true);
+    if (P.st === 'dead' || Math.abs(P.x - f.x) > 220) f.cd2 = Math.min(f.cd2, f.t);
+    if (f.t >= f.cd2) {
+      f.lift = 0; SND.thud(); burst(f.x, f.y, 8, '#a89878', 50, 20);
+      if (hitFoe(f, f.cn, P.dir)) { if (f.st === 'fin') game.slowT = 0.8; }
+      else { f.st = f.k === 'lord' ? 'stun' : 'tstun'; f.t = f.k === 'lord' ? 0 : -0.3; }
+    }
+    return;
+  }
   if (f.st === 'ffall') {
     const r = air(f, dt);
     if (r >= 0) { f.st = 'fdead'; f.t = 0; SND.thud(); }
@@ -1423,7 +1791,9 @@ function updLord(f, dt) {
     case 'meditate':
       if (same) {
         f.st = 'rise'; f.t = 0; SND.ignite(); SND.lord(); shake(2);
-        const Q = { 'Pani Burz': '„Piasek pogrzebie twoje światło.”', 'Lord Głębin': '„Ocean nie oddaje tego, co pochłonie.”' };
+        const Q = { 'Pani Burz': '„Piasek pogrzebie twoje światło.”', 'Lord Głębin': '„Ocean nie oddaje tego, co pochłonie.”',
+          'Królowa Mrozu': '„Twoje serce zamarznie szybciej niż ostrze.”', 'Łowca Verdanu': '„W tym lesie to ja poluję.”',
+          'Arcylord': '„Wszyscy moi uczniowie upadli. Ja nie upadnę.”' };
         say(lordName(f) + ': ' + (Q[f.name] || '„Twoje światło zgaśnie w tych lochach.”'), 3.5);
       }
       break;
@@ -1512,8 +1882,15 @@ function updBolts(dt) {
 
 function boltHitsPlayer(b) {
   const facing = Math.sign(b.vx) === -P.dir;
-  const armed = P.sword && facing;
-  if (armed && (P.st === 'block' || P.st === 'strike' || P.st === 'fin')) {
+  const armed = P.sword && facing && !P.thr;
+  if (P.sh > 0) {
+    // Tarcza aury: łapie strzał, od poziomu 3 odbija go do strzelca
+    if (skl('shield') >= 3) { b.vx = -b.vx * 1.1; b.o = 'p'; b.x += Math.sign(b.vx) * 6; }
+    else b.dead = true;
+    SND.deflect(); burst(b.x, b.y, 8, '#80c0ff', 80, 50, true);
+    return;
+  }
+  if (armed && (P.st === 'block' || P.st === 'strike' || P.st === 'fin' || P.as > 0)) {
     // Cios lub zasłona odbija strzał prosto w strzelca
     b.vx = -b.vx * 1.15; b.o = 'p';
     SND.deflect(); shake(1);
@@ -1619,6 +1996,10 @@ function update(dt) {
     return;
   }
   if (game.mode !== 'play') return;
+  // Nowy punkt umiejętności – komunikat
+  const pts = skPts();
+  if (pts > (game.lp ?? pts)) { say('Nowy punkt umiejętności! U – drzewko', 2.5); tone(880, 0.15, 'triangle', 0.05, 1320); }
+  game.lp = pts;
   if (LV.ship) {
     if (msg.t > 0 && msg.t < 90) msg.t -= dt;
     if (flash) { flash.t -= dt; if (flash.t <= 0) flash = null; }
@@ -1684,6 +2065,18 @@ const THEMES = [
   { back: '#04080e', brick: ['#0e1a26', '#0c1622', '#10202c', '#0a1420'], hi: '#1a3040',
     wall: ['#050a10', '#1e3444', '#2a4658'], slab: ['#6a8ea0', '#345868', '#0a1820'],
     lamp: 'tech', rgb: '90,160,255', dark: 0.5, deco: '#4080ff' },
+  // 9: lodowa planeta Krio
+  { back: '#1a2a3a', brick: ['#3a5468', '#34506a', '#425e74', '#2e4a60'], hi: '#7aa0bc',
+    wall: ['#16222e', '#5a7a92', '#a8c8e0'], slab: ['#e8f4ff', '#8aaac4', '#2a3a4a'],
+    lamp: 'tech', rgb: '160,220,255', dark: 0.22, deco: '#a0e8ff' },
+  // 10: leśny księżyc Verdan
+  { back: '#0e1a10', brick: ['#22361e', '#1e301a', '#283e22', '#1a2c18'], hi: '#3e5a2e',
+    wall: ['#0c140a', '#4a5a34', '#6a7a46'], slab: ['#a8b878', '#6a7a44', '#1e2612'],
+    lamp: 'fire', rgb: '255,200,110', dark: 0.3, deco: '#90ff70' },
+  // 11: wulkaniczna planeta Ignis
+  { back: '#1a0806', brick: ['#3a1a12', '#341610', '#421e14', '#2e120c'], hi: '#6a2a18',
+    wall: ['#140604', '#4a2418', '#7a3a22'], slab: ['#8a6a5a', '#4a3028', '#1a0a06'],
+    lamp: 'fire', rgb: '255,90,30', dark: 0.4, deco: '#ff5010' },
 ];
 const BGS = {};
 
@@ -1716,6 +2109,70 @@ function drawSkyDesert(c) {
   c.fillRect(36, 30, 22, 3);
   dune(54, 4, '#c88a50', 2);
   dune(60, 3, '#a87040', 4);
+}
+
+// Niebo Krio: zorza, ośnieżone szczyty
+function drawSkyIce(c) {
+  const gr = c.createLinearGradient(0, 0, 0, 62);
+  gr.addColorStop(0, '#0a1430'); gr.addColorStop(0.6, '#2a4a78'); gr.addColorStop(1, '#8ab4d8');
+  c.fillStyle = gr; c.fillRect(0, 0, SW, 62);
+  for (let i = 0; i < 50; i++) { c.fillStyle = rnd() < 0.5 ? '#ffffff' : '#a0c0ff'; c.fillRect(rnd() * SW, rnd() * 30, 1, 1); }
+  for (let k = 0; k < 3; k++) {                    // zorza
+    c.strokeStyle = ['rgba(80,255,180,0.25)', 'rgba(120,200,255,0.2)', 'rgba(180,120,255,0.15)'][k]; c.lineWidth = 4 - k;
+    c.beginPath();
+    for (let x = 0; x <= SW; x += 8) c.lineTo(x, 14 + k * 5 + Math.sin(x / 30 + k) * 6);
+    c.stroke();
+  }
+  const peaks = (base, col, snow, ph) => {
+    c.fillStyle = col; c.beginPath(); c.moveTo(0, 62);
+    const pts = [];
+    for (let x = 0; x <= SW; x += 20) { const y = base - Math.abs(Math.sin(x / 37 + ph)) * 18; pts.push([x, y]); c.lineTo(x, y); }
+    c.lineTo(SW, 62); c.fill();
+    c.fillStyle = snow;
+    pts.forEach(([x, y]) => { c.beginPath(); c.moveTo(x - 5, y + 5); c.lineTo(x, y); c.lineTo(x + 5, y + 5); c.fill(); });
+  };
+  peaks(46, '#4a6a8a', '#e8f4ff', 0.4);
+  peaks(58, '#2a4060', '#c8e0f8', 2.1);
+}
+
+// Niebo Verdan: olbrzymie drzewa i gazowy gigant
+function drawSkyForest(c) {
+  const gr = c.createLinearGradient(0, 0, 0, 62);
+  gr.addColorStop(0, '#1a3a4a'); gr.addColorStop(0.7, '#5a8a6a'); gr.addColorStop(1, '#a8c890');
+  c.fillStyle = gr; c.fillRect(0, 0, SW, 62);
+  c.fillStyle = 'rgba(255,200,140,0.5)'; c.beginPath(); c.arc(70, 22, 18, 0, Math.PI * 2); c.fill();
+  c.fillStyle = 'rgba(220,150,100,0.35)'; c.fillRect(52, 18, 36, 2); c.fillRect(54, 26, 32, 2);
+  const trees = (col, n, w, top) => {
+    c.fillStyle = col;
+    for (let i = 0; i < n; i++) {
+      const x = rnd() * SW, h = top + rnd() * 10;
+      c.fillRect(x, h, w, 62 - h);
+      c.beginPath(); c.ellipse(x + w / 2, h, w * 2.6, 7, 0, 0, Math.PI * 2); c.fill();
+    }
+  };
+  trees('#3a5a44', 7, 5, 18); trees('#20382a', 6, 8, 26);
+  c.fillStyle = '#142418'; c.fillRect(0, 54, SW, 8);
+}
+
+// Niebo Ignis: czerwone chmury popiołu, wulkany, rzeki lawy
+function drawSkyLava(c) {
+  const gr = c.createLinearGradient(0, 0, 0, 62);
+  gr.addColorStop(0, '#1a0404'); gr.addColorStop(0.6, '#5a1408'); gr.addColorStop(1, '#c04010');
+  c.fillStyle = gr; c.fillRect(0, 0, SW, 62);
+  for (let i = 0; i < 6; i++) { c.fillStyle = 'rgba(40,10,8,0.5)'; c.beginPath(); c.ellipse(rnd() * SW, 8 + rnd() * 20, 30, 5, 0, 0, Math.PI * 2); c.fill(); }
+  c.fillStyle = '#200806';
+  [[60, 26, 40], [200, 18, 56], [290, 30, 30]].forEach(([x, t, w]) => {
+    c.beginPath(); c.moveTo(x - w, 62); c.lineTo(x - 5, t); c.lineTo(x + 5, t); c.lineTo(x + w, 62); c.fill();
+    const cg = c.createRadialGradient(x, t, 1, x, t, 14);
+    cg.addColorStop(0, 'rgba(255,200,80,0.9)'); cg.addColorStop(1, 'rgba(255,80,20,0)');
+    c.fillStyle = cg; c.fillRect(x - 14, t - 14, 28, 20);
+    c.strokeStyle = '#ff6010'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(x - 3, t + 1); c.lineTo(x - 6, t + 8); c.lineTo(x - 9, t + 16); c.stroke();
+    c.beginPath(); c.moveTo(x + 2, t + 1); c.lineTo(x + 6, t + 10); c.stroke();
+    c.fillStyle = '#200806';
+  });
+  c.fillStyle = '#ff7020'; c.fillRect(0, 58, SW, 1);
+  c.fillStyle = '#100403'; c.fillRect(0, 59, SW, 3);
 }
 
 function drawSky(c) {
@@ -1778,8 +2235,12 @@ function buildBG(L) {
   b.width = SW * RS; b.height = SH * RS;
   const c = b.getContext('2d');
   c.scale(RS, RS);
-  const top = L.sky ? 62 : 0, sea = L.theme >= 7, sand = L.theme === 5 || L.theme === 6;
-  if (L.sky) { if (L.theme === 5) drawSkyDesert(c); else drawSky(c); }
+  const top = L.sky ? 62 : 0, sea = L.theme === 7 || L.theme === 8, sand = L.theme === 5 || L.theme === 6;
+  const ice = L.theme === 9, wood = L.theme === 10, fire = L.theme === 11;
+  if (L.sky) {
+    if (L.theme === 5) drawSkyDesert(c); else if (ice) drawSkyIce(c);
+    else if (wood) drawSkyForest(c); else if (fire) drawSkyLava(c); else drawSky(c);
+  }
   // Mur tła z cegieł
   c.fillStyle = T.back; c.fillRect(0, top, SW, 180 - top);
   for (let y = top, row = 0; y < 180; y += 8, row++) {
@@ -1792,7 +2253,7 @@ function buildBG(L) {
     }
   }
   // Rury biegnące pionowo przez loch (nie w piaskowcu)
-  for (let i = 0; i < (sand ? 0 : 2); i++) {
+  for (let i = 0; i < (sand || wood ? 0 : 2); i++) {
     const px = 40 + Math.floor(rnd() * 240);
     c.fillStyle = '#20242c'; c.fillRect(px, top, 5, 180 - top);
     c.fillStyle = '#4a505c'; c.fillRect(px + 1, top, 2, 180 - top);
@@ -1813,6 +2274,30 @@ function buildBG(L) {
         for (let y = 0; y < (kelp ? 26 : 12); y += 3) c.lineTo(bx + Math.sin(y / 4 + i) * (kelp ? 2.5 : 3), fy - y);
         c.stroke();
       }
+      continue;
+    }
+    if (ice && k < 0.3) {                               // sople pod sufitem rzędu
+      c.fillStyle = '#c8e8ff';
+      for (let i = 0; i < 4; i++) { const ix = x + 4 + i * 7, h = 4 + Math.floor(rnd() * 8); c.beginPath(); c.moveTo(ix, y0); c.lineTo(ix + 3, y0); c.lineTo(ix + 1.5, y0 + h); c.fill(); }
+      c.fillStyle = '#ffffff'; c.fillRect(x + 2, y0, 28, 1);
+      continue;
+    }
+    if (wood && k < 0.4) {                              // pnącza i liście
+      c.strokeStyle = '#3a7a30'; c.lineWidth = 1.2;
+      const vx = x + 8 + rnd() * 16, len = 16 + rnd() * 24;
+      c.beginPath(); c.moveTo(vx, y0);
+      for (let y = 0; y < len; y += 3) c.lineTo(vx + Math.sin(y / 5) * 2, y0 + y);
+      c.stroke();
+      c.fillStyle = '#5aa040';
+      for (let y = 4; y < len; y += 7) { c.beginPath(); c.ellipse(vx + Math.sin(y / 5) * 2 + 2, y0 + y, 2.5, 1.2, 0.5, 0, Math.PI * 2); c.fill(); }
+      continue;
+    }
+    if (fire && k < 0.3) {                              // rozżarzone pęknięcia skały
+      c.strokeStyle = '#ff5010'; c.lineWidth = 1;
+      let px = x + 6 + rnd() * 20, py = y0 + 10;
+      c.beginPath(); c.moveTo(px, py);
+      for (let i = 0; i < 5; i++) { px += (rnd() - 0.5) * 8; py += 5 + rnd() * 4; c.lineTo(px, py); }
+      c.stroke();
       continue;
     }
     if (sand && k < 0.22) {                              // płyta z glifami słońca
@@ -1891,6 +2376,33 @@ function buildBG(L) {
       for (let i = 0; i < 5; i++) c.fillRect(x + 3 + i * 6, fy + 1 + (i % 2), 3, 1);
       continue;
     }
+    if (ch === 'I') {                                  // lód – śliska tafla
+      c.fillStyle = '#e8f8ff'; c.fillRect(x, fy, TW, 2);
+      c.fillStyle = '#8ac8e8'; c.fillRect(x, fy + 2, TW, 4);
+      c.fillStyle = '#4a7a98'; c.fillRect(x, fy + 6, TW, 1);
+      c.fillStyle = '#ffffff'; c.fillRect(x + 4, fy + 1, 7, 1); c.fillRect(x + 18, fy + 3, 5, 1);
+      c.fillStyle = 'rgba(200,240,255,0.5)'; c.fillRect(x + 8, fy + 7, 2, 3); c.fillRect(x + 22, fy + 7, 1, 4);
+      continue;
+    }
+    if (ch === 'J') {                                  // wyrzutnia – grzyb sprężynujący
+      slab(c, x, fy, TW, T.slab);
+      c.fillStyle = '#2a5a2a'; c.fillRect(x + 14, fy - 4, 4, 4);
+      c.fillStyle = '#3aa040'; c.beginPath(); c.ellipse(x + 16, fy - 5, 10, 3.5, 0, Math.PI, 0); c.fill();
+      c.fillStyle = '#a0ff90'; c.fillRect(x + 10, fy - 7, 2, 1); c.fillRect(x + 16, fy - 8, 2, 1); c.fillRect(x + 21, fy - 7, 2, 1);
+      continue;
+    }
+    if (ch === 'V') {                                  // jezioro lawy
+      const g = c.createLinearGradient(0, fy - 1, 0, fy + 8);
+      g.addColorStop(0, '#ffd040'); g.addColorStop(0.4, '#ff6010'); g.addColorStop(1, '#6a1004');
+      c.fillStyle = g; c.fillRect(x, fy - 1, TW, 9);
+      continue;
+    }
+    if (ch === 'F') {                                  // dysza płomieni
+      slab(c, x, fy, TW, T.slab);
+      c.fillStyle = '#1a0a06'; c.fillRect(x + 10, fy - 2, 12, 2);
+      c.fillStyle = '#5a2a14'; c.fillRect(x + 9, fy - 3, 14, 1);
+      continue;
+    }
     if (ch === 'U') {                                  // kratka z powietrzem
       slab(c, x, fy, TW, T.slab);
       c.fillStyle = '#0a1418'; c.fillRect(x + 8, fy - 3, 16, 3);
@@ -1945,6 +2457,7 @@ const POSE = {
   strike: [4, -27, 3, -23, 1, -13, 7, -7, 9, 0, -3, -6, -6, 0, 8, -20, 12, -19, -2, -20, -5, -22, 27, -15],
   low: [1, -28, 0, -24, -1, -13, 4, -7, 5, 0, -3, -7, -5, 0, 3, -17, 5, -11, -3, -19, -5, -15, -10, -2],
   strike2: [3, -29, 2, -25, 0, -14, 6, -7, 8, 0, -3, -7, -5, 0, 6, -24, 9, -29, -2, -21, -5, -18, 22, -44],
+  chop: [4, -27, 3, -23, 1, -13, 7, -7, 9, 0, -3, -6, -6, 0, 8, -18, 11, -13, -2, -20, -5, -20, 25, -3],
   block: [0, -28, 0, -24, -1, -13, 3, -7, 4, 0, -3, -7, -5, 0, 3, -22, 5, -26, -3, -20, -5, -21, 9, -42],
   lunge: [5, -26, 4, -22, 1, -13, 9, -6, 12, 0, -4, -6, -9, 0, 9, -20, 13, -20, -1, -20, -4, -22, 30, -22],
   hurt: [-3, -28, -2, -24, 0, -13, 2, -7, 3, 0, -2, -7, -4, 0, 0, -19, 3, -16, -4, -20, -6, -17, 12, -10],
@@ -2009,6 +2522,30 @@ const STY = {
   lord3: { type: 'lord', skin: '#7a9aa0', hand: '#0e1a1e', handB: '#081014', arm: '#16303a', armB: '#0e2028',
     body: '#16303a', leg: '#0e2028', legB: '#081418', boot: '#04080a', belt: '#40a0b0',
     cloak: '#0e2a32', cloakB: '#06161c', hood: '#08181e', eye: '#ff2040', thick: 5 },
+  // Krio: śnieżni szturmowcy – białe płyty, futrzany kołnierz
+  snow: { type: 'trooper', hand: '#3a4048', handB: '#262a30', arm: '#d8e0e8', armB: '#a0aab8',
+    body: '#e8eef4', plate: '#ffffff', leg: '#b8c4d0', legB: '#8a96a4', boot: '#3a4048', belt: '#5a6470',
+    helm: '#dce4ec', helmB: '#9aa6b4', visor: '#30a0ff', stripe: '#8a96a4', thick: 5 },
+  // Verdan: zwiadowcy w maskującej pelerynie
+  scout: { type: 'raider', skin: '#8a6a4a', hand: '#2a3a20', handB: '#1a2614', arm: '#4a6a34', armB: '#344a24',
+    body: '#5a7a3a', leg: '#3a4a26', legB: '#283418', boot: '#1a1a10', belt: '#3a2a18',
+    cloak: '#3a5a2a', cloakB: '#24381a', wrap: '#6a8a4a', wrapB: '#4a6234', visor: '#ffd040', thick: 5 },
+  // Ignis: gwardia popiołu – czarne płyty, żarzący się wizjer
+  ash: { type: 'trooper', hand: '#1a1010', handB: '#100808', arm: '#3a2a26', armB: '#241816',
+    body: '#2e2220', plate: '#5a4440', leg: '#241a18', legB: '#160e0c', boot: '#0a0606', belt: '#5a1a10',
+    helm: '#2a1e1c', helmB: '#160e0c', visor: '#ff6010', stripe: '#ff4010', thick: 5 },
+  // Królowa Mrozu – biel i lód
+  lord4: { type: 'lord', skin: '#d8e8f0', hand: '#c8d8e8', handB: '#8aa0b8', arm: '#a8c0d8', armB: '#6a84a0',
+    body: '#b8d0e4', leg: '#7a94ac', legB: '#4a6078', boot: '#1a2a3a', belt: '#40c0ff',
+    cloak: '#e0f0ff', cloakB: '#90b0cc', hood: '#c0d8ec', eye: '#ff3050', thick: 5 },
+  // Łowca z Verdan – skóry i rogi
+  lord5: { type: 'lord', skin: '#6a5a3a', hand: '#2a2014', handB: '#1a140c', arm: '#4a3a22', armB: '#2e2414',
+    body: '#3a4a22', leg: '#2e3a1a', legB: '#1c2410', boot: '#100c06', belt: '#9a7a30',
+    cloak: '#2a3a18', cloakB: '#18220c', hood: '#1e2a10', eye: '#ff4020', thick: 5 },
+  // Arcylord – obsydian i żar
+  lord6: { type: 'lord', skin: '#5a3a34', hand: '#0a0606', handB: '#050303', arm: '#1a0e0c', armB: '#0e0806',
+    body: '#1a0e0c', leg: '#140a08', legB: '#0a0504', boot: '#050202', belt: '#ff4010',
+    cloak: '#2a0a06', cloakB: '#140402', hood: '#0e0302', eye: '#ffa020', thick: 5 },
 };
 
 // Kolejki elementów świecących – rysowane po nałożeniu ciemności, więc „świecą” w lochu
@@ -2158,6 +2695,16 @@ function lerpPose(a, b, k) {
 
 // Animacja cięcia: zamach → szybkie cięcie (ze smugą) → zatrzymanie → powrót do gardy
 function slashPose(t, combo) {
+  if (combo >= 2) {
+    // 3. cios – cięcie z góry, 4. – młyniec (obrót), 5. – pchnięcie
+    const A = combo === 2 ? POSE.strike2 : combo === 3 ? POSE.windup : POSE.fight,
+      B = combo === 2 ? POSE.chop : combo === 3 ? POSE.strike : POSE.lunge;
+    const t1 = combo === 2 ? 0.08 : 0.1, t2 = t1 + 0.1;
+    if (t < t1) return { a: lerpPose(POSE.fight, A, t / t1), tr: combo === 3, flip: combo === 3 && t > t1 * 0.4 };
+    if (t < t2) return { a: lerpPose(A, B, ease((t - t1) / 0.1)), tr: true };
+    if (t < t2 + 0.1) return { a: B, tr: t < t2 + 0.05 };
+    return { a: lerpPose(B, POSE.fight, Math.min(1, (t - t2 - 0.1) / 0.1)), tr: false };
+  }
   const A = combo ? POSE.low : POSE.windup, B = combo ? POSE.strike2 : POSE.strike;
   if (t < 0.07) return { a: lerpPose(POSE.fight, A, t / 0.07), tr: false };
   if (t < 0.17) return { a: lerpPose(A, B, ease((t - 0.07) / 0.1)), tr: true };
@@ -2196,7 +2743,7 @@ const walkPose = (base, ph) => gait(base, ph, false, false);
 function drawPlayer() {
   const p = P;
   if (p.st === 'ship') return;
-  let a = POSE.stand, x = p.x, y = p.y, blade = p.sword ? 'hip' : '', ign = p.ign, tr = false, sway = 0;
+  let a = POSE.stand, x = p.x, y = p.y, blade = p.sword ? 'hip' : '', ign = p.ign, tr = false, sway = 0, fdir = p.dir;
   if (p.st === 'swim') {
     // Pływanie: postać obrócona poziomo, nogi kopią, przy cięciu ostrze w wyciągniętej dłoni
     a = POSE.swim.slice();
@@ -2229,8 +2776,17 @@ function drawPlayer() {
       blade = p.ign > 0.02 ? 'hand' : blade;
       break;
     }
-    case 'jump': a = POSE.jump; sway = 5; break;
-    case 'fall': a = p.soft ? POSE.fall : (p.vy < 120 ? POSE.jump : POSE.fall); sway = -2; break;
+    case 'jump': case 'fall': {
+      a = p.st === 'jump' ? POSE.jump : p.soft ? POSE.fall : (p.vy < 120 ? POSE.jump : POSE.fall);
+      sway = p.st === 'jump' ? 5 : -2;
+      if (p.sword && p.ign > 0.02) {
+        blade = 'hand';
+        // Cięcie w powietrzu: zamach znad głowy w dół
+        if (p.as > 0) { const k = 1 - p.as / 0.28; a = k < 0.35 ? lerpPose(POSE.jump, POSE.strike2, k / 0.35) : lerpPose(POSE.strike2, POSE.chop, Math.min(1, (k - 0.35) / 0.3)); tr = k > 0.3 && k < 0.8; }
+        else a = lerpPose(a, POSE.fight, 0.5);
+      }
+      break;
+    }
     case 'land': case 'crouch': a = POSE.crouch; break;
     case 'upjump': a = POSE.reach; y -= Math.sin(Math.PI * Math.min(1, p.t / 0.45)) * 9; break;
     case 'reach': a = POSE.reach; break;
@@ -2253,7 +2809,7 @@ function drawPlayer() {
     case 'drink': a = p.t < 0.4 ? POSE.pick : POSE.drink; break;
     case 'fight': a = POSE.fight; blade = 'hand'; break;
     case 'fstep': a = gait(POSE.fight, p.ph, false, false); blade = 'hand'; break;
-    case 'strike': { const s = slashPose(p.t, p.combo); a = s.a; tr = s.tr; blade = 'hand'; break; }
+    case 'strike': { const s = slashPose(p.t, p.combo); a = s.a; tr = s.tr; blade = 'hand'; if (s.flip) fdir = -p.dir; break; }
     case 'block': a = POSE.block; blade = 'hand'; break;
     case 'fin': { const s = finPose(p); a = s.a; tr = s.tr; y += s.dy; blade = 'hand'; break; }
     case 'use': a = POSE.aim; break;
@@ -2261,6 +2817,7 @@ function drawPlayer() {
     case 'dead': a = POSE.dead; blade = ''; break;
     case 'exit': ctx.globalAlpha = Math.max(0, 1 - p.t / 1.4); break;
   }
+  if (p.thr) blade = '';
   if (p.inv > 0 && p.st !== 'dead' && Math.floor(p.inv * 20) % 2) ctx.globalAlpha = 0.35;
   if (blade === 'hand' && ign <= 0.02 && p.st !== 'sword') blade = p.sword ? 'hip' : '';
   const sink = p.sink > 0 && !p.air;
@@ -2269,9 +2826,27 @@ function drawPlayer() {
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, SW, floorY(p.r) + 1); ctx.clip();
     y += Math.min(22, p.sink * 11);
   }
-  drawFig(x, y, p.dir, a, STY.hero, { blade, ign, bc: game.blade, trail: tr, own: p, sway });
+  drawFig(x, y, fdir, a, STY.hero, { blade, ign, bc: game.blade, trail: tr, own: p, sway });
   if (sink) ctx.restore();
   ctx.globalAlpha = 1;
+  // Tarcza aury – pulsująca kopuła
+  if (p.sh > 0) {
+    const k = Math.min(1, p.sh / 0.4), pr = 22 + Math.sin(game.anim * 8) * 1.5;
+    ctx.strokeStyle = 'rgba(128,192,255,' + (0.5 * k) + ')'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y - 16, pr, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(128,192,255,' + (0.1 * k) + ')'; ctx.fill();
+    EQ.push({ x, y: y - 16, col: '#80c0ff', r: 26, a: 0.25 * k, rgb: '128,192,255' });
+  }
+  // Lecące ostrze (rzut)
+  if (p.thr) {
+    const q = p.thr, L = 11, c = Math.cos(q.a), s = Math.sin(q.a);
+    ctx.strokeStyle = game.blade.col; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(q.x - c * L, q.y - s * L); ctx.lineTo(q.x + c * L, q.y + s * L); ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(q.x - c * L, q.y - s * L); ctx.lineTo(q.x + c * L, q.y + s * L); ctx.stroke();
+    ctx.fillStyle = '#9aa4b4'; ctx.fillRect(q.x - 1.5, q.y - 1.5, 3, 3);
+    EQ.push({ x: q.x, y: q.y, col: game.blade.col, r: 16, a: 0.6, rgb: game.blade.rgb });
+  }
   // Smuga przy upadku z nieba
   if (p.soft && p.air) {
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
@@ -2302,7 +2877,7 @@ function drawFoe(f) {
   if (isDrone(f)) { drawDrone(f); return; }
   const S = STY[f.sty || f.k] || STY[f.k];
   let a = POSE.stand, blade = '', ign = 1, tr = false, gun = f.k === 'lord' ? '' : f.k, y = f.y - (f.lift || 0), alpha = 1;
-  if (f.st === 'pulled') {
+  if (f.st === 'pulled' || f.st === 'choke') {
     a = POSE.fall; if (f.k === 'lord') blade = 'hand';
   } else if (f.st === 'knock') {
     a = POSE.hurt; if (f.k === 'lord') blade = 'hand';
@@ -2427,6 +3002,31 @@ function drawDynamic() {
       for (let i = 0; i < 4; i++) ctx.fillRect(gx + i * 2 + 1, top, 1, len);
       for (let yy = top + len - 1; yy > top; yy -= 6) ctx.fillRect(gx, yy, 8, 1);
       ctx.fillStyle = '#a8aebc'; ctx.fillRect(gx, top + len - 1, 8, 1);
+    } else if (ch === 'V') {
+      // Falująca lawa z bąblami
+      for (let i = 0; i < 4; i++) {
+        const bx = x + 4 + i * 8, h = 1 + Math.sin(game.anim * 3 + i * 1.7 + c) * 1;
+        ctx.fillStyle = i % 2 ? '#ffb030' : '#ff8020'; ctx.fillRect(bx, fy - 1 - h, 6, h + 1);
+      }
+      const b = (game.anim * 0.8 + c * 0.3) % 1;
+      if (b < 0.5) { ctx.fillStyle = '#ffe080'; ctx.fillRect(x + 8 + (c * 7) % 16, fy - 2 - b * 10, 2, 2); }
+      EQ.push({ x: x + 16, y: fy, col: '#ff6020', r: 22, a: 0.35, rgb: '255,100,30' });
+    } else if (ch === 'F') {
+      const on = ventOn(c), warm = ((game.anim + c * 0.53) % 2.4) > 2.0;
+      if (on) {
+        for (let i = 0; i < 7; i++) {
+          const h = 18 + Math.random() * 16, fx = x + 11 + i * 1.6 + (Math.random() - 0.5) * 3;
+          ctx.fillStyle = i % 3 === 0 ? '#ffe070' : i % 3 === 1 ? '#ff8020' : '#ff4010';
+          ctx.fillRect(fx, fy - 2 - h, 2, h);
+        }
+        EQ.push({ x: x + 16, y: fy - 16, col: '#ff8030', r: 26, a: 0.6, rgb: '255,130,40' });
+      } else if (warm) {
+        ctx.fillStyle = '#ff6020'; ctx.fillRect(x + 11, fy - 3, 10, 1);
+        if (Math.random() < 0.3) burst(x + 16, fy - 3, 1, '#ff9040', 20, 30, true);
+        EQ.push({ x: x + 16, y: fy - 3, col: '#ff6020', r: 10, a: 0.4, rgb: '255,90,30' });
+      }
+    } else if (ch === 'J') {
+      EQ.push({ x: x + 16, y: fy - 6, col: '#80ff90', r: 10 + Math.sin(game.anim * 4) * 2, a: 0.3, rgb: '120,255,140' });
     } else if (ch === 'W') {
       // Rękojeść ostrza z pulsującym kryształem
       const y = fy - 2, sx = x + 11;
@@ -2573,7 +3173,31 @@ function drawAuraFx() {
   ctx.globalCompositeOperation = 'lighter';
   for (const w of WAVES) {
     const k = w.t / 0.5, pull = w.k === 'pull';
-    const rad = pull ? 70 * (1 - k) + 6 : 10 + k * 90;
+    if (w.k === 'bolt') {
+      // Błyskawica łamana między celami, migocze
+      if (Math.floor(w.t * 30) % 3 === 2) continue;
+      for (let j = 0; j < 2; j++) {
+        ctx.strokeStyle = j ? `rgba(255,255,255,${1 - k})` : `rgba(130,160,255,${1 - k})`; ctx.lineWidth = j ? 1 : 3;
+        ctx.beginPath(); ctx.moveTo(w.pts[0][0], w.pts[0][1]);
+        for (let i = 1; i < w.pts.length; i++) {
+          const [ax, ay] = w.pts[i - 1], [bx, by] = w.pts[i];
+          for (let s = 1; s <= 5; s++) {
+            const u = s / 5, jit = s < 5 ? (Math.random() - 0.5) * 10 : 0;
+            ctx.lineTo(ax + (bx - ax) * u + jit * 0.3, ay + (by - ay) * u + jit);
+          }
+        }
+        ctx.stroke();
+      }
+      for (const pt of w.pts) EQ.push({ x: pt[0], y: pt[1], col: '#a0c0ff', r: 18, a: 0.6 * (1 - k), rgb: '150,180,255' });
+      continue;
+    }
+    if (w.k === 'trick') {
+      ctx.strokeStyle = `rgba(220,180,255,${0.6 * (1 - k)})`; ctx.lineWidth = 1.5;
+      for (let i = 0; i < 2; i++) { ctx.beginPath(); ctx.arc(w.x, w.y, 8 + k * w.rg * (0.6 + i * 0.4), 0, Math.PI * 2); ctx.stroke(); }
+      continue;
+    }
+    const sc = (w.rg || (pull ? 150 : 120)) / (pull ? 150 : 120);
+    const rad = (pull ? 70 * (1 - k) + 6 : 10 + k * 90) * sc;
     ctx.strokeStyle = pull ? `rgba(150,200,255,${0.7 * (1 - k)})` : `rgba(200,220,255,${0.8 * (1 - k)})`;
     for (let i = 0; i < 3; i++) {
       ctx.lineWidth = 2 - i * 0.5;
@@ -2584,6 +3208,14 @@ function drawAuraFx() {
     }
   }
   ctx.globalCompositeOperation = 'source-over';
+  // Uścisk – fioletowa poświata wokół szyi duszonego
+  for (const f of FOES) if (f.st === 'choke') {
+    const y = f.y - 26 - (f.lift || 0);
+    ctx.strokeStyle = `rgba(200,140,255,${0.5 + Math.sin(game.anim * 20) * 0.2})`; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(f.x, y, 5, 0, Math.PI * 2); ctx.stroke();
+    seg([P.x + P.dir * 10, P.y - 24], [f.x, y], 0.6, 'rgba(200,140,255,0.25)');
+    EQ.push({ x: f.x, y, col: '#c090ff', r: 12, a: 0.4, rgb: '190,140,255' });
+  }
   const q = game.qte;
   if (q) {
     const f = q.f, x = f.x, y = (isDrone(f) ? f.y : f.y - 18) - (f.lift || 0);
@@ -2686,7 +3318,7 @@ function hint() {
   const shooter = FOES.some(f => f.alive && f.k !== 'lord' && f.r === p.r && (f.st === 'aim' || f.st === 'fire'));
   if (FIGHTST.includes(p.st) || p.st === 'hurt') {
     if (shooter && !engaged()) return 'Strzelec! A – cięcie odbija strzały · S schowaj';
-    return 'A cios (2× kombo) · ↑ zasłona · ←→ krok' + (p.drawn ? ' · S schowaj' : '');
+    return 'A cios (' + (skl('combo') + 1) + '× kombo) · ↑ zasłona · ↑+←→ skok · ←→ krok' + (p.drawn ? ' · S schowaj' : '');
   }
   if (ch === 'W') return 'A – podnieś rękojeść';
   if (ch === 'H' || ch === 'M') return 'A – wypij miksturę';
@@ -2696,8 +3328,10 @@ function hint() {
   if (crateAhead() >= 0) return p.sword ? 'A – rozbij skrzynię' : 'Skrzynię rozetnie tylko ostrze';
   if (!p.sword) return '←→ bieg · Shift+←→ ostrożny krok · ↑ skok · ↓ zwis';
   if (gate >= 0.8 && gateT <= 0 && !used) return 'Krata się zamyka – biegnij!';
-  if (shooter) return 'Strzelec! A – cięcie odbija strzały · X fala aury';
-  if (p.sword && FOES.some(f => f.alive && f.aw && f.r === p.r && Math.abs(f.x - p.x) < 150)) return 'Z – przyciągnij aurą, potem szybko A';
+  if (shooter) { const i = game.slots.indexOf('push'); return 'Strzelec! A – cięcie odbija strzały' + (i >= 0 ? ' · ' + 'ZX'[i] + ' fala aury' : ''); }
+  if (p.sword && game.slots.includes('pull') && FOES.some(f => f.alive && f.aw && f.r === p.r && Math.abs(f.x - p.x) < 150))
+    return (game.slots[0] === 'pull' ? 'Z' : 'X') + ' – przyciągnij aurą, potem szybko A';
+  if (skPts() > 0) return 'U – drzewko umiejętności (wolne punkty: ' + skPts() + ')';
   return '';
 }
 
@@ -2745,6 +3379,13 @@ function drawHUD() {
   txt(m + ':' + String(sec).padStart(2, '0'), SW - 4, 6, '#c8c0d8', 'right');
   txt('◆ ' + game.crys, SW - 30, 6, '#80e0ff', 'right', 7);
   txt((lvl + 1) + '/' + LEVELS.length + '  ' + LV.name, 4, 6, '#a8a0c0', 'left', 7);
+  // Moce w slotach Z / X (szare – za mało aury) i wolne punkty umiejętności
+  if (P.sword && game.slots) game.slots.forEach((k, i) => {
+    const ok = P.aura >= powerCost(k) && !(k === 'throw' && P.thr);
+    txt((i ? 'X ' : 'Z ') + PNAME[k], 4 + i * 66, 15, ok ? '#a8d8ff' : '#56607a', 'left', 6);
+  });
+  const pts = skPts();
+  if (pts > 0) txt('✦ ' + pts + ' pkt – U', SW - 4, 15, Math.floor(game.anim * 3) % 2 ? '#ffe080' : '#c0a050', 'right', 6);
 }
 
 // Odłamki: rozcięta broń, deski, rękojeść Lorda (gorący koniec żarzy się)
@@ -2823,7 +3464,44 @@ function draw() {
     txt('R / A – powtórz poziom', SW / 2, 94, '#e0d0b0');
   }
   if (game.mode === 'win') drawWin();
+  if (game.mode === 'tree') drawTree();
   drawText();
+}
+
+// Drzewko umiejętności – trzy kolumny po 3–4 węzły, poziomy jako kropki, sloty Z/X
+function drawTree() {
+  ctx.fillStyle = 'rgba(4,6,16,0.9)'; ctx.fillRect(0, 0, SW, SH);
+  txt('DRZEWKO UMIEJĘTNOŚCI', SW / 2, 9, '#f0c040', 'center', 9);
+  txt('◆ ' + game.crys + '   ✦ punkty: ' + skPts() + '   (10 ◆ = 1 punkt)', SW / 2, 20, '#80e0ff', 'center', 6.5);
+  const [sc, sn] = game.tsel;
+  SKILLS.forEach((C, ci) => {
+    txt(C.name, treeBox(ci, 0).x + 48, 27, C.col, 'center', 6);
+    C.nodes.forEach((n, ni) => {
+      const b = treeBox(ci, ni), lv = skl(n.id), sel = ci === sc && ni === sn, can = skCan(n);
+      if (ni > 0) {
+        ctx.fillStyle = lv > 0 ? C.col : '#2a3040';
+        ctx.fillRect(b.x + 47, b.y - 4, 2, 4);
+      }
+      rrect(b.x, b.y, b.w, b.h, 3, lv > 0 ? 'rgba(40,52,80,0.95)' : 'rgba(20,24,36,0.95)');
+      ctx.strokeStyle = sel ? '#ffffff' : can ? C.col : lv > 0 ? 'rgba(160,180,220,0.5)' : '#2c3244';
+      ctx.lineWidth = sel ? 1.5 : 1;
+      ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+      txt(n.name, b.x + 5, b.y + 8, lv > 0 ? '#e8e0d0' : '#7a8098', 'left', 6.5);
+      for (let i = 0; i < 4; i++) dot(b.x + 8 + i * 8, b.y + 19, 2.2, i < lv ? C.col : '#30384c');
+      if (n.power) {
+        const s = game.slots.indexOf(n.id);
+        if (s >= 0) txt(s ? 'X' : 'Z', b.x + b.w - 8, b.y + 18, '#ffe080', 'center', 8);
+        else txt('moc', b.x + b.w - 12, b.y + 19, '#56607a', 'center', 5);
+      }
+      if (can && Math.floor(game.anim * 3) % 2) txt('+', b.x + b.w - 6, b.y + 7, '#ffe080', 'center', 8);
+    });
+  });
+  const n = SKILLS[sc].nodes[sn];
+  rrect(6, 152, SW - 12, 26, 3, 'rgba(20,24,36,0.95)');
+  txt(n.name + (n.power ? '  (moc – koszt ' + powerCost(n.id) + ' aury)' : '  (zdolność bierna)'), 12, 159, SKILLS[sc].col, 'left', 6.5);
+  txt(n.d, 12, 170, '#c8c0b0', 'left', 6);
+  txt(game.tmsg || '←→↑↓ wybór · A ulepsz · Z/X przypisz moc do slotu · U/S zamknij', SW / 2, 189,
+    game.tmsg ? '#ffe080' : '#8890a8', 'center', 6.5);
 }
 
 function drawWin() {
@@ -2831,8 +3509,9 @@ function drawWin() {
     ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, SW, 180);
     const m = Math.floor(game.time / 60), sec = Math.floor(game.time % 60);
     txt('SAGA UKOŃCZONA', SW / 2, 56, '#f0c040', 'center', 14);
-    txt('Trzej Lordowie upadli – Cytadela, Sarrak i Thalos są wolne.', SW / 2, 80, '#e8d8b0', 'center', 7.5);
-    txt('Czas: ' + m + ':' + String(sec).padStart(2, '0') + '   Życie: ' + P.hp + '/' + P.max + '   Kryształy: ' + game.crys, SW / 2, 96, '#e8d8b0');
+    txt('Arcylord i jego pięciu uczniów upadli.', SW / 2, 76, '#e8d8b0', 'center', 7.5);
+    txt('Cytadela, Sarrak, Thalos, Krio, Verdan i Ignis są wolne.', SW / 2, 86, '#e8d8b0', 'center', 7);
+    txt('Czas: ' + m + ':' + String(sec).padStart(2, '0') + '   Życie: ' + P.hp + '/' + P.max + '   Kryształy: ' + game.crys, SW / 2, 100, '#e8d8b0');
     txt('A – zagraj ponownie', SW / 2, 124, '#a0a0b0');
   }
 }

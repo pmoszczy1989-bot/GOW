@@ -2,8 +2,8 @@
 
 Platformówka inspirowana klasycznym **Prince of Persia (1989)**, osadzona w realiach kosmicznej opowieści
 o rycerzach z ostrzami energii. Spadasz z nieba na dach cytadeli, odnajdujesz rękojeść ostrza
-(losowy kolor – nigdy czerwony) i przechodzisz trzy rozdziały: **Cytadelę**, **pustynię Sarrak**
-i **głębiny Thalos**. Między planetami lecisz myśliwcem. Każdy rozdział kończy Lord z czerwonym ostrzem.
+(losowy kolor – nigdy czerwony) i przechodzisz sześć rozdziałów: **Cytadelę**, **pustynię Sarrak**,
+**głębiny Thalos**, **lodowy Krio**, **leśny Verdan** i **wulkaniczny Ignis**. Między planetami lecisz myśliwcem. Każdy rozdział kończy Lord z czerwonym ostrzem.
 Grafika, dźwięki, postacie i nazwy są autorskie – z inspiracji zapożyczona jest tylko mechanika.
 
 ## Uruchomienie
@@ -23,12 +23,13 @@ w prawym przyciski z ikonami: ostrze/cios, skok, przyciągnięcie, odepchnięcie
 |---|---|
 | ← → | bieg / obrót; pod wodą – pływanie |
 | Shift + ← → | ostrożny krok (zatrzymuje się na krawędzi i przed kolcami) |
-| ↑ | skok w górę / podciągnięcie / wyjście przez drzwi; z rozbiegu – skok w dal; pod wodą – w górę, przy brzegu – wyjście |
+| ↑ | skok w górę / podciągnięcie / wyjście przez drzwi; z rozbiegu – skok w dal; w powietrzu (Zwinność 3) – podwójny skok; pod wodą – w górę, przy brzegu – wyjście |
+| ↑ + ← → w walce | skok z wyciągniętym ostrzem (A w powietrzu = cięcie z wyskoku) |
 | ↓ | kucnięcie (unik strzału); przy krawędzi – zwis; w zwisie – puszczenie; pod wodą – w dół |
-| A | podniesienie / użycie terminala lub konsoli; z ostrzem – wyciągnięcie i cios (2× = kombo); cięcie odbija strzały i rozbija skrzynie |
+| A | podniesienie / użycie terminala lub konsoli; z ostrzem – wyciągnięcie i cios (seria 2–5 = kombo); cięcie odbija strzały i rozbija skrzynie |
 | S | schowanie ostrza |
-| Z | przyciągnięcie aurą (wróg, dron, kryształ lub mikstura) – potem szybko **A** = cios aury |
-| X | fala odpychająca aury (odrzuca wrogów, strzały, rozbija skrzynie) |
+| Z / X | moc z 1. / 2. slotu (start: Przyciąganie / Odepchnięcie); po przyciągnięciu wroga szybko **A** = cios aury |
+| U | drzewko umiejętności (←→↑↓ wybór, A – ulepsz, Z/X – przypisz moc do slotu, Esc/U – zamknij) |
 | ↑ w walce | zasłona – odbija strzały i paruje ciosy |
 | R | powtórz poziom |
 | F | pełny ekran |
@@ -38,7 +39,7 @@ Lot statkiem: ←→↑↓ ruch, **A** działa (przytrzymaj), **Z** torpeda, **X
 ## Poziomy
 
 Ekran 320×200 px, komnata 3 rzędy × 10 kafli (kafel 32 px, rząd 60 px). Poziom może mieć kilka komnat –
-wyjście za krawędź ekranu przenosi do sąsiedniej. Definicje w `levels.js` (`LEVELS`, 17 poziomów):
+wyjście za krawędź ekranu przenosi do sąsiedniej. Definicje w `levels.js` (`LEVELS`, 35 poziomów):
 
 - **Rozdział I – Cytadela**: Dach Cytadeli, Blok więzienny, Kuźnia reaktora, Zalane tunele, Sala Mrocznego Lorda.
 - **Przelot**: Ucieczka z orbity (myśliwiec, eskadry, krążownik).
@@ -47,14 +48,24 @@ wyjście za krawędź ekranu przenosi do sąsiedniej. Definicje w `levels.js` (`
 - **Przelot**: Blokada orbitalna (trudniejsza).
 - **Rozdział III – Thalos (podwodna stacja)**: Stacja Thalos – śluza, Zatopione hangary, Rafa wraków, Kopuła Głębin,
   Leże Lorda Głębin (pływanie, tlen, wyloty powietrza, miny, drony, Lord z dwoma ostrzami).
+- **Przelot**: Przełęcz Mgławicy.
+- **Rozdział IV – Krio (lodowa planeta)**: Lodowe pustkowia, Jaskinie lodowe, Kriogeniczna forteca, Lodowy most,
+  Tron Królowej Mrozu (śliski lód, żołnierze w bieli).
+- **Przelot**: Pas lodowych asteroid.
+- **Rozdział V – Verdan (planeta-las)**: Korony drzew, Wioska na palach, Świątynia w pniu, Bagna Verdanu,
+  Gniazdo Łowcy (grzyby-trampoliny, zwiadowcy, bagna).
+- **Przelot**: Szturm na flotę Arcylorda.
+- **Rozdział VI – Ignis (planeta lawy)**: Pola lawy, Kuźnie Arcylorda, Rzeka ognia, Cytadela Popiołu,
+  Tron Arcylorda (lawa, dysze ognia, żołnierze w popiele, finałowy Arcylord).
 
 Każdy kolejny poziom jest trochę trudniejszy (więcej i silniejszych wrogów, krótsze okna, więcej pułapek).
 
 Legenda: `_` podłoga · spacja – brak podłogi (w dolnym rzędzie przepaść, pod wodą dno) · `#` mur ·
 `L` luźna płyta · `S` kolce · `W` rękojeść · `H` mikstura · `M` duża mikstura · `P` płyta naciskowa ·
 `G` krata · `D` drzwi · `B` skrzynia · `O` kryształ · `T` terminal · `K` konsola · `E` bariera energetyczna ·
-`Q` ruchome piaski · `U` wylot powietrza · `N` mina podwodna.
-Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0, c1, sp }`,
+`Q` ruchome piaski · `U` wylot powietrza · `N` mina podwodna · `I` lód (ślizga się) · `J` grzyb-trampolina ·
+`F` dysza ognia (parzy co kilka sekund) · `V` lawa (śmierć). Motywy `theme` 0–11.
+Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0, c1, sp }` (szerokie, 52 px),
 `wl` poziom wody w px (125 – zalany dolny rząd, -100 – cała komnata pod wodą).
 
 ## Zasady
@@ -64,11 +75,19 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
   Patrolują, trzymają dystans strzału, cofają się przed ostrzem. Blaster 3 trafienia, karabin 4 (później więcej).
   Kucnięcie przepuszcza strzał, zasłona lub cięcie odbija go we wroga.
 - Lord (10 trafień) paruje, odskakuje i wpada w furię przy 5 życiach.
-- **Aura** (pasek pod życiem, odnawia się): przyciągnięcie (Z) uruchamia quick time event – szybkie **A**
+- **Aura** (pasek pod życiem, odnawia się): przyciągnięcie uruchamia quick time event – szybkie **A**
   daje efektowne zakończenie; Lordowi zabiera 2 życia, ale Lord potrafi się opierać przyciąganiu
-  i kontratakuje, gdy zareagujesz za wolno. Fala (X) odrzuca wrogów i strzały.
+  i kontratakuje, gdy zareagujesz za wolno. Odepchnięcie odrzuca wrogów i strzały.
+- **Kryształy**: dron +1, żołnierz +2, Lord +10, kryształ `O` na mapie, w locie statkiem premia za zestrzelenia.
+  Każde 10 kryształów = 1 punkt umiejętności (**U**). Każda umiejętność ma 4 poziomy (start: poziom 1 – najmniejszy zasięg).
+- **Drzewko umiejętności** (3 gałęzie): *Obrona* – Odepchnięcie, Tarcza aury, Omamienie, Uzdrowienie;
+  *Ostrze* – Kombinacje (seria 2–5 cięć), Zwinność (dalsze skoki, miękkie lądowanie, podwójny skok),
+  Rzut ostrzem, Skupienie (regeneracja aury); *Gniew* – Przyciąganie, Uścisk (duszenie), Pioruny aury.
+  Pod klawiszami Z i X można mieć maksymalnie **dwie moce**.
+- Skoki: chwilowy zapas po zejściu z krawędzi i zapamiętanie wciśnięcia ↑ przed lądowaniem, chwyt krawędzi w locie.
 - Ostatni cios uruchamia finiszer w zwolnionym tempie – bez krwi (iskry, rozcięta broń, żar).
 - Woda: pod wodą ubywa tlenu (pasek O₂); uzupełnia go powierzchnia i wylot `U`. Bez tlenu tracisz życie.
+- Lód `I` ślizga się, grzyb `J` wybija wysoko, dysza `F` zieje ogniem cyklicznie, lawa `V` zabija.
 - Ruchome piaski `Q` spowalniają i wciągają – nie zatrzymuj się. Miny `N` wybuchają przy dotyku (cięcie pod wodą je rozbraja).
 - Krata otwiera się po naciśnięciu płyty, konsola `K` wyłącza bariery i blokuje kratę w górze.
 
@@ -84,7 +103,7 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
 Kolejność skryptów: `levels.js → game.js → ship.js`.
 
 Kluczowe funkcje: `loadLevel`, `mkRoom`/`enterRoom`/`roomCheck` (komnaty), `update(dt)` (krok 1/60 s),
-`updPlayer`, `auraPull`/`auraPush`/`updQte`, `startSwim`/`updO2`, `updPlats`, `updMines`, `startFinisher`,
+`updPlayer`, `SKILLS`/`skl`/`drawTree` (drzewko, sloty `game.slots`), `auraPull`/`auraPush`/`updQte`, `ventOn`, `startSwim`/`updO2`, `updPlats`, `updMines`, `startFinisher`,
 `hitFoe`, `updTrooper`, `updLord`, `buildBG` (tło wg `THEMES`, klucz `BGS[lvl:komnata]`), `drawFig` (style `STY`),
 `gait` (chód/bieg z kinematyką nóg), `drawWater`, `drawAuraFx`, `lighting`, `drawEmissive`, `draw`, `drawWin`, `fit`.
 
