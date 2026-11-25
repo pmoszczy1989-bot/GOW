@@ -18,12 +18,12 @@ const STEP = 1 / 60;
 
 // Kolory ostrza bohatera – losowane przy znalezieniu rękojeści (nigdy czerwony – to kolor Lordów)
 const BLADES = [
-  { name: 'niebieskim', col: '#3a9cff', rgb: '60,150,255' },
-  { name: 'zielonym', col: '#40ff60', rgb: '70,255,100' },
-  { name: 'fioletowym', col: '#b060ff', rgb: '170,90,255' },
-  { name: 'żółtym', col: '#ffe040', rgb: '255,220,60' },
-  { name: 'błękitnym', col: '#40f0ff', rgb: '60,235,255' },
-  { name: 'białym', col: '#e8f0ff', rgb: '220,230,255' },
+  { id: 'blue', name: 'niebieskim', col: '#3a9cff', rgb: '60,150,255' },
+  { id: 'green', name: 'zielonym', col: '#40ff60', rgb: '70,255,100' },
+  { id: 'violet', name: 'fioletowym', col: '#b060ff', rgb: '170,90,255' },
+  { id: 'yellow', name: 'żółtym', col: '#ffe040', rgb: '255,220,60' },
+  { id: 'cyan', name: 'błękitnym', col: '#40f0ff', rgb: '60,235,255' },
+  { id: 'white', name: 'białym', col: '#e8f0ff', rgb: '220,230,255' },
 ];
 const RED = { col: '#ff3030', rgb: '255,40,40' };
 
@@ -211,18 +211,26 @@ if (fullBtn) fullBtn.addEventListener('click', e => { e.stopPropagation(); toggl
 const treeBtn = document.getElementById('treeb');
 if (treeBtn) {
   treeBtn.addEventListener('pointerdown', e => e.stopPropagation());
-  treeBtn.addEventListener('click', e => { e.stopPropagation(); audioOn(); if (game.mode !== 'title') openTree(); });
+  treeBtn.addEventListener('click', e => { e.stopPropagation(); audioOn(); if (game.mode !== 'title' && game.mode !== 'gear') openTree(); });
+}
+const gearBtn = document.getElementById('gearb');
+if (gearBtn) {
+  gearBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  gearBtn.addEventListener('click', e => { e.stopPropagation(); audioOn(); if (game.mode !== 'title' && game.mode !== 'tree') openGear(); });
 }
 ['fullscreenchange', 'webkitfullscreenchange'].forEach(n => document.addEventListener(n, () => setTimeout(fit, 50)));
 
 window.addEventListener('keydown', e => {
   if (e.key === 'f' || e.key === 'F') { toggleFull(); e.preventDefault(); return; }
-  if (game.mode === 'title') { start(); e.preventDefault(); return; }
-  if (e.key === 'r' || e.key === 'R') { if (game.mode !== 'tree') restart(); return; }
-  if (e.key === 'u' || e.key === 'U' || (game.mode === 'tree' && e.key === 'Escape')) { openTree(); e.preventDefault(); return; }
+  if (game.mode === 'title') { if (!e.repeat) titleKey(e); e.preventDefault(); return; }
   const k = keyOf(e);
+  if (game.mode === 'story') { if (!e.repeat) storyKey(e.key === 'Enter' || e.key === ' ' ? 'act' : e.key === 'Escape' ? 'sheathe' : k); e.preventDefault(); return; }
+  if (e.key === 'r' || e.key === 'R') { if (game.mode === 'play') restart(); return; }
+  if (e.key === 'u' || e.key === 'U' || (game.mode === 'tree' && e.key === 'Escape')) { if (game.mode !== 'gear') openTree(); e.preventDefault(); return; }
+  if (e.key === 'o' || e.key === 'O' || (game.mode === 'gear' && e.key === 'Escape')) { if (game.mode !== 'tree') openGear(); e.preventDefault(); return; }
   if (game.mode === 'tree') { if (k && !e.repeat) treeKey(k); e.preventDefault(); return; }
-  if (game.mode === 'win' && (e.key === 'Enter' || k === 'act')) { newGame(); return; }
+  if (game.mode === 'gear') { if (k && !e.repeat) gearKey(k); e.preventDefault(); return; }
+  if (game.mode === 'win' && (e.key === 'Enter' || k === 'act')) { toTitle(); return; }
   if (k) { e.preventDefault(); press(k); }
 });
 window.addEventListener('keyup', e => { const k = keyOf(e); if (k) release(k); });
@@ -242,7 +250,9 @@ document.querySelectorAll('#touch button[data-k]').forEach(b => {
     e.preventDefault(); audioOn();
     if (game.mode === 'title') { start(); return; }
     if (game.mode === 'tree') { e.preventDefault(); treeKey(k); return; }
-    if (k === 'act' && game.mode === 'win') { newGame(); return; }
+    if (game.mode === 'gear') { gearKey(k); return; }
+    if (game.mode === 'story') { storyKey(k); return; }
+    if (k === 'act' && game.mode === 'win') { toTitle(); return; }
     if (k === 'act' && P && P.st === 'dead' && P.t > 1.5) { restart(); return; }
     try { b.setPointerCapture(e.pointerId); } catch (er) {}
     press(k); b.classList.add('on');
@@ -294,7 +304,9 @@ if (stick) {
 cv.addEventListener('pointerdown', e => {
   audioOn();
   if (game.mode === 'tree') { treeTap(e); return; }
-  if (game.mode === 'win') newGame();
+  if (game.mode === 'gear') { gearTap(e); return; }
+  if (game.mode === 'story') { storyTap(e); return; }
+  if (game.mode === 'win') toTitle();
   else if (game.mode === 'play' && P && P.st === 'dead' && P.t > 1.5) restart();
 });
 
@@ -303,7 +315,8 @@ let lvl = 0, LV, MAP, P, FOES, LOOSE, BOLTS, gate, gateT, gateTick, spikes, part
 let ROOMS = [], ri = 0, RD = {}, PLATS = [], MINES = [], WAVES = [];
 const game = { mode: 'title', time: 0, anim: 0, blade: BLADES[0], maxHp: 3, lvlMax: 3, shake: 0, stop: 0, trans: 0, hud: null,
   crys: 0, crysLvl: 0, slowT: 0, bars: 0, finName: '', qte: null,
-  sk: null, slots: null, spent: 0, snap: null, tsel: [0, 0], tmsg: '' };
+  sk: null, slots: null, spent: 0, snap: null, tsel: [0, 0], tmsg: '',
+  live: false, toasts: [], gsel: 0, gmsg: '', dark: 0, path: '', hurtLvl: 0, cause: '', story: null, stealth: 0 };
 
 // ===== Drzewko umiejętności =====
 // Co 10 kryształów – 1 punkt. Każdy węzeł ma 4 poziomy; węzeł wymaga poprzedniego w kolumnie (poz. ≥ 1).
@@ -348,6 +361,7 @@ function skUp(n) {
     SND.ui && SND.ui(0); return;
   }
   game.sk[n.id] = skl(n.id) + 1; game.spent++;
+  if (game.sk[n.id] >= 4) achv('master');
   game.tmsg = n.name + ' – poziom ' + game.sk[n.id] + '!';
   if (n.power && skl(n.id) === 1 && !game.slots.includes(n.id)) game.tmsg += ' Przypisz do Z lub X.';
   tone(520, 0.08, 'square', 0.05); setTimeout(() => tone(780, 0.12, 'square', 0.05), 70);
@@ -459,7 +473,7 @@ function loadLevel(i) {
   BOLTS = []; parts = []; DEBRIS = []; WAVES = []; flash = null; used = false;
   gate = 0; gateT = 0; gateTick = 0;
   game.shake = 0; game.stop = 0; game.hud = null; game.slowT = 0; game.bars = 0; game.qte = null; game.lock = null; game.lockCd = 0;
-  game.crysLvl = game.crys;
+  game.crysLvl = game.crys; game.hurtLvl = 0;
   if (!game.sk) skReset();
   game.snap = skSnap(); updLabels();
   game.mode = 'play';
@@ -471,6 +485,7 @@ function loadLevel(i) {
       drawn: false, inv: 0, ign: 0, trail: [], aura: 100, o2: 10, sink: 0, ph: 0 };
     msg = { text: '', t: 0 };
     startShip();
+    saveRun();
     return;
   }
   ROOMS = (LV.rooms || [{ map: LV.map, foes: LV.foes, plats: LV.plats, wl: LV.wl == null ? 999 : LV.wl }]).map(mkRoom);
@@ -483,27 +498,38 @@ function loadLevel(i) {
     aura: 100, o2: 10, ot: 1.5, sink: 0, ph: 0, pw: 0,
   };
   say(drop ? (LV.dropMsg || 'Spadasz z nocnego nieba...') : 'Poziom ' + (i + 1) + ': ' + LV.name, 2.5);
+  stripBladeCrystals();
+  saveRun();
 }
 
-function newGame() { game.maxHp = 3; game.time = 0; game.crys = 0; skReset(); loadLevel(0); }
+function newGame() {
+  game.maxHp = 3; game.time = 0; game.crys = 0; game.dark = 0; game.path = ''; game.blade = BLADES[0]; game.lp = undefined;
+  skReset(); lsSet(SAVE_KEY, null); loadLevel(0);
+  if (game.live) showStory(0, () => { game.mode = 'play'; }, LEVELS[0].chapter);
+}
 function restart() {
   if (game.mode === 'title') { start(); return; }
-  if (game.mode === 'win') { newGame(); return; }
-  if (game.mode === 'trans') return;
-  if (game.mode === 'tree') game.mode = 'play';
+  if (game.mode === 'win') { toTitle(); return; }
+  if (game.mode === 'trans' || game.mode === 'story') return;
+  if (game.mode === 'tree' || game.mode === 'gear') game.mode = 'play';
   game.maxHp = game.lvlMax; game.crys = game.crysLvl;
   if (game.snap) { game.sk = game.snap.sk; game.slots = game.snap.slots; game.spent = game.snap.spent; }
   loadLevel(lvl);
 }
-function start() {
-  audioOn();
-  titleEl.classList.add('hide');
-  newGame();
-}
+// Enter / dotknięcie na ekranie tytułowym: kontynuuj zapis albo zacznij od nowa
+function start() { if (runSave()) contGame(); else beginGame(); }
+function toTitle() { game.live = false; game.mode = 'title'; buildMenu(); titleEl.classList.remove('hide'); }
 function finishLevel() {
   game.maxHp = P ? P.max : game.maxHp;
-  if (lvl < LEVELS.length - 1) { game.mode = 'trans'; game.trans = 0; }
-  else { game.mode = 'win'; SND.win(); }
+  if (!game.hurtLvl) achv(LV.ship ? 'pilot' : 'clean');
+  if (lvl < LEVELS.length - 1) {
+    const next = () => { game.mode = 'trans'; game.trans = 0; }, n = LEVELS[lvl + 1];
+    if (n.chapter) showStory(chapOf(lvl + 1), next, n.chapter); else next();
+  } else showStory('end', () => {
+    game.mode = 'win'; SND.win(); lsSet(SAVE_KEY, null);
+    achv('saga'); achv(game.path === 'dark' ? 'dark' : 'light');
+    if (game.time < 3600) achv('fast');
+  }, 'EPILOG');
 }
 
 // ===== Mapa =====
@@ -666,7 +692,7 @@ function hurtPlayer(n, pushDir, kind) {
     P.sh = 0; P.inv = 0.4; SND.deflect(); burst(P.x, P.y - 18, 14, '#80c0ff', 90, 60, true);
     say('Tarcza aury pochłania cios.', 1); return;
   }
-  P.hp -= n; P.inv = 0.8;                     // krótka nietykalność – seria nie zabija od razu
+  P.hp -= n; P.inv = 0.8; game.hurtLvl++;     // krótka nietykalność – seria nie zabija od razu
   flash = { col: '#ff0000', t: 0.12 };
   SND.hit(); shake(2);
   burst(P.x, P.y - 18, 6, '#d8c8a0', 50);
@@ -761,14 +787,14 @@ function landP(r) {
     return;
   }
   if (rows >= 3 && ag >= 4) {
-    P.hp--; P.ld = 0.8; SND.thud(); shake(3); flash = { col: '#ff0000', t: 0.12 };
+    P.hp--; P.ld = 0.8; game.hurtLvl++; SND.thud(); shake(3); flash = { col: '#ff0000', t: 0.12 };
     if (P.hp <= 0) die('upadek'); else say('Przewrót! Zwinność uratowała ci życie.', 2);
     return;
   }
   if (rows >= 3) { die('upadek'); return; }
   if (rows === 2 && ag >= 2) { P.ld = 0.35; SND.thud(); burst(P.x, P.y, 8, '#a8d8ff', 40, 20, true); }
   else if (rows === 2) {
-    P.hp--; P.ld = 0.8; SND.thud(); SND.hit(); shake(2); flash = { col: '#ff0000', t: 0.12 };
+    P.hp--; P.ld = 0.8; game.hurtLvl++; SND.thud(); SND.hit(); shake(2); flash = { col: '#ff0000', t: 0.12 };
     if (P.hp <= 0) die('upadek'); else say('Auć! Twardy upadek.', 2);
   } else if (rows === 1) { P.ld = 0.3; SND.thud(); }
   else P.ld = 0.06;
@@ -904,7 +930,7 @@ const PNAME = { pull: 'Przyciąganie', push: 'Odepchnięcie', shield: 'Tarcza', 
   throw: 'Rzut ostrzem', choke: 'Uścisk', bolt: 'Pioruny' };
 const pullRange = () => [80, 80, 110, 140, 170][skl('pull')];
 const pushRange = () => [70, 70, 95, 120, 145][skl('push')];
-const powerCost = k => Math.round(POWER_COST[k] * (1 - 0.1 * skl('focus')));
+const powerCost = k => Math.round(POWER_COST[k] * (1 - 0.1 * skl('focus')) * (bladeIs('prism') ? 0.85 : 1));
 
 function usePower(kind) {
   if (!kind) return false;
@@ -916,6 +942,8 @@ function usePower(kind) {
   const cost = powerCost(kind);
   if (P.aura < cost) { say('Za mało aury – odczekaj chwilę.', 1); SND.click(); return false; }
   P.aura -= cost; P.pk = kind;
+  game.cause = kind;
+  if (kind === 'bolt' || kind === 'choke') game.dark = (game.dark || 0) + 1;
   if (P.st === 'swim') P.pw = 0.35; else { P.st = 'power'; P.t = 0; }
   const by = bodyY(), d = P.dir, lv = skl(kind);
   if (kind === 'pull' || kind === 'push') {
@@ -940,6 +968,7 @@ function usePower(kind) {
     P.thr = { x: P.x + d * 10, y: by - 2, dir: d, d: 0, max: 60 + 30 * lv, back: false, hit: [], t: 0, a: 0 };
     tone(180, 0.3, 'sawtooth', 0.04, 90); SND.swing();
   }
+  game.cause = '';
   return true;
 }
 
@@ -1106,7 +1135,8 @@ function auraPull() {
     if (!sw) for (let i = 1; i <= Math.min(4, 1 + skl('pull')); i++) {
       const c = colOf(P.x) + d * i, ch = cell(P.r, c);
       if (isWall(P.r, c)) break;
-      if ((ch === 'O' || ch === 'H') && c >= 0 && c < COLS) {
+      if ((ch === 'O' || ch === 'H' || ch === 'C') && c >= 0 && c < COLS) {
+        if (ch === 'C') { pickBladeCrystal(P.r, c); return; }
         MAP[P.r][c] = '_';
         for (let k = 0; k < 6; k++) burst(c * TW + 16 - d * k * 6 * i, P.y - 12, 1, '#c0e0ff', 30, 20, true);
         if (ch === 'O') { game.crys++; SND.gem(); say('Aura przyciąga kryształ (' + game.crys + ')', 1.2); }
@@ -1152,7 +1182,7 @@ function updQte(rdt) {
       if (P.st !== 'swim' && P.sword) { P.st = 'strike'; P.t = 0.12; P.hit = true; } else if (P.st === 'swim') P.sl = 0.3;
     } else {
       f.hp = 1;
-      if (hitFoe(f, 1, d)) startFinisher(f, 3);
+      if (hitFoe(f, 1, d)) { startFinisher(f, 3); achv('qte'); }
     }
     return;
   }
@@ -1250,6 +1280,7 @@ function lockWin(L) {
   const dmg = Math.min(4, 2 + u.length);
   const name = u.length ? u.map(k => LNAME[k]).join(' + ') : 'SERIA CIĘĆ';
   endLock();
+  achv('lock');
   flash = { col: '#ffffff', t: 0.2 }; shake(4); SND.slash();
   for (const k of u) lockFx(k, f);
   if (u.includes('heal')) P.hp = Math.min(P.max, P.hp + 1);
@@ -1339,7 +1370,8 @@ function updSwim(p, dt) {
   // Przedmioty zbierane w locie
   for (let r = 0; r < ROWS; r++) {
     const ch = cell(r, c);
-    if ('OHM'.indexOf(ch) < 0 || Math.abs(p.y - (floorY(r) - 10)) > 16 || Math.abs(c * TW + 16 - p.x) > 12) continue;
+    if ('OHMC'.indexOf(ch) < 0 || Math.abs(p.y - (floorY(r) - 10)) > 16 || Math.abs(c * TW + 16 - p.x) > 12) continue;
+    if (ch === 'C') { pickBladeCrystal(r, c); continue; }
     MAP[r][c] = '_';
     if (ch === 'O') { game.crys++; SND.gem(); say('Kryształ energii (' + game.crys + ')', 1.2); }
     else if (ch === 'M') { p.max++; p.hp = p.max; SND.drink(); say('Wielka mikstura – więcej życia!', 2.5); }
@@ -1455,7 +1487,7 @@ function updPlayer(dt) {
   const p = P;
   p.t += dt;
   p.inv = Math.max(0, p.inv - dt);
-  p.aura = Math.min(100, p.aura + [18, 22, 26, 30, 36][skl('focus')] * dt);
+  p.aura = Math.min(100, p.aura + [18, 22, 26, 30, 36][skl('focus')] * (bladeId('amber') ? 1.3 : 1) * dt);
   p.sh = Math.max(0, (p.sh || 0) - dt);
   updThrow(dt);
   updO2(p, dt);
@@ -1510,6 +1542,8 @@ function updPlayer(dt) {
     sparks(colOf(p.x) * TW + 16, p.y - 10, '#80f0ff', 10);
     say('Kryształ energii (' + game.crys + ')', 1.2);
   }
+  if (!p.air && p.st !== 'dead' && HANGST.indexOf(p.st) < 0 && cell(p.r, colOf(p.x)) === 'C' &&
+      Math.abs(colOf(p.x) * TW + 16 - p.x) < 12) pickBladeCrystal(p.r, colOf(p.x));
 
   switch (p.st) {
     case 'stand': {
@@ -1594,6 +1628,7 @@ function updPlayer(dt) {
       if (!p.got && p.t >= 0.45) {
         p.got = true; MAP[p.r][colOf(p.x)] = '_';
         game.blade = BLADES[Math.floor(Math.random() * BLADES.length)];
+        ownBlade(game.blade);
         SND.ignite(); SND.sword(); shake(2);
         sparks(p.x, p.y - 44, game.blade.col, 18);
       }
@@ -1656,7 +1691,7 @@ function updPlayer(dt) {
       if (p.combo === 4 && p.t > 0.08 && p.t < 0.18) { moveX(p, p.dir * 80 * dt, p.r); if (!groundCheck(false)) break; }
       if (PR.act && p.t > 0.1) p.q = true;
       if (!p.hit && p.t >= hitT) { p.hit = true; resolveStrike(); }
-      if (p.q && p.t >= hitT + 0.12 && p.combo < skl('combo')) { startStrike(true); break; }
+      if (p.q && p.t >= hitT + 0.12 && p.combo < comboMax()) { startStrike(true); break; }
       if (p.t > end) p.st = afterFight();
       break;
     }
@@ -1723,12 +1758,13 @@ function updPlayer(dt) {
 }
 
 function resolveStrike() {
+  const ext = bladeIs('dbl') ? 8 : 0;
   // Drony w zasięgu ostrza (w powietrzu przed graczem)
   for (const f of FOES) {
     if (!isDrone(f) || !f.alive || Math.sign(f.x - P.x) !== P.dir) continue;
-    if (Math.abs(f.x - P.x) < 30 && Math.abs(f.y - (P.y - 16)) < 20) { hitFoe(f, 1, P.dir); return; }
+    if (Math.abs(f.x - P.x) < 30 + ext && Math.abs(f.y - (P.y - 16)) < 20) { hitFoe(f, 1, P.dir); return; }
   }
-  let t = null, bd = 41;
+  let t = null, bd = 41 + ext;
   for (const f of FOES) {
     if (!f.alive || f.air || isDrone(f) || f.r !== P.r || Math.sign(f.x - P.x) !== P.dir) continue;
     const d = Math.abs(f.x - P.x);
@@ -1743,7 +1779,9 @@ function resolveStrike() {
     t.cd = Math.min(t.cd, 0.15);
     return;
   }
-  if (hitFoe(t, P.combo === 4 ? 2 : 1, P.dir) && t.st === 'fin') startFinisher(t);
+  const gold = bladeId('gold') && Math.random() < 0.2;
+  if (gold) sparks(t.x, t.y - 24, '#ffe080', 10);
+  if (hitFoe(t, (P.combo === 4 ? 2 : 1) + (gold ? 1 : 0), P.dir) && t.st === 'fin') startFinisher(t);
 }
 
 // Zwraca true, gdy cios był śmiertelny
@@ -1757,6 +1795,7 @@ function hitFoe(f, n, dir) {
       burst(f.x, f.y, 18, '#ffb060', 140, 100, true); burst(f.x, f.y, 8, '#60e0ff', 90, 80, true);
       for (let i = 0; i < 3; i++) debris(f.x, f.y, f.r, (Math.random() - 0.5) * 160, -60 - Math.random() * 80, 3, '#2a3440', 0.5);
       SND.crash(); say('Dron zniszczony. +1 ◆', 1.2); addCrys(1, f.x, f.y);
+      onKill(f);
       return true;
     }
     f.st = 'back'; f.t = 0; f.vx = dir * 120;
@@ -1772,6 +1811,7 @@ function hitFoe(f, n, dir) {
       sparks(f.x, f.y - 30, RED.col, 30); addCrys(10, f.x, f.y - 30);
     } else { say((f.k === 'rifle' ? 'Szturmowiec z karabinem pokonany.' : 'Strażnik z blasterem pokonany.') + ' +2 ◆', 2); addCrys(2, f.x, f.y - 20); }
     foePush(f, dir * 6);
+    onKill(f);
     if (f.st === 'fdead') {
       // Upadek zamiast natychmiastowej śmierci; broń szturmowca rozcięta na pół
       f.st = 'fin'; f.t = 0; f.fd = dir; f.hd = false;
@@ -1840,7 +1880,10 @@ function updFoe(f, dt) {
     if (P.st === 'dead' || Math.abs(P.x - f.x) > 220) f.cd2 = Math.min(f.cd2, f.t);
     if (f.t >= f.cd2) {
       f.lift = 0; SND.thud(); burst(f.x, f.y, 8, '#a89878', 50, 20);
-      if (hitFoe(f, f.cn, P.dir)) { if (f.st === 'fin') game.slowT = 0.8; }
+      game.cause = 'choke';
+      const killed = hitFoe(f, f.cn, P.dir);
+      game.cause = '';
+      if (killed) { if (f.st === 'fin') game.slowT = 0.8; }
       else { f.st = f.k === 'lord' ? 'stun' : 'tstun'; f.t = f.k === 'lord' ? 0 : -0.3; }
     }
     return;
@@ -2062,7 +2105,7 @@ function updBolts(dt) {
         if (isDrone(f) ? Math.abs(f.y - b.y) > 10 : f.r !== b.r) continue;
         b.dead = true;
         if (f.k === 'lord') { SND.deflect(); sparks(b.x, b.y, RED.col, 8); }   // Lord odbija strzały ostrzem
-        else hitFoe(f, 1, Math.sign(b.vx));
+        else { game.cause = 'mirror'; hitFoe(f, 1, Math.sign(b.vx)); game.cause = ''; }
         break;
       }
     }
@@ -2181,6 +2224,9 @@ function update(dt) {
   game.shake = Math.max(0, game.shake - dt * 10);
   game.bars += ((game.slowT > 0 || game.lock ? 1 : 0) - game.bars) * Math.min(1, dt * 8);
   updHum();
+  if (game.toasts.length && (game.toasts[0].t += dt) > 3.2) game.toasts.shift();
+  bladeTick();
+  if (game.mode === 'story') { game.story.t += dt; return; }
   if (game.mode === 'trans') {
     game.trans += dt;
     if (game.trans > 2.4) loadLevel(lvl + 1);
@@ -2191,6 +2237,7 @@ function update(dt) {
   const pts = skPts();
   if (pts > (game.lp ?? pts)) { say('Nowy punkt umiejętności! U – drzewko', 2.5); tone(880, 0.15, 'triangle', 0.05, 1320); }
   game.lp = pts;
+  if (game.crys >= 100) achv('rich');
   if (LV.ship) {
     if (msg.t > 0 && msg.t < 90) msg.t -= dt;
     if (flash) { flash.t -= dt; if (flash.t <= 0) flash = null; }
@@ -2951,7 +2998,7 @@ function drawPlayer() {
     ctx.rotate(p.dir * Math.PI / 2 * 0.9 + Math.sin(p.ph * 1.4) * 0.05);
     const ib = p.sword && p.ign > 0.02;
     if (p.inv > 0 && Math.floor(p.inv * 20) % 2) ctx.globalAlpha = 0.35;
-    drawFig(0, 15, p.dir, a, STY.hero, { blade: ib ? 'hand' : (p.sword ? 'hip' : ''), ign: p.ign, bc: game.blade, trail: p.sl > 0.12, own: p, sway: 2 });
+    drawFig(0, 15, p.dir, a, STY.hero, { blade: ib ? 'hand' : (p.sword ? 'hip' : ''), ign: p.ign, bc: game.blade, trail: p.sl > 0.12, own: p, sway: 2, dbl: game.blade.dbl, dual: game.blade.dual });
     ctx.globalAlpha = 1;
     ctx.restore();
     // drawFig zapisał ostrze w układzie obróconym – przelicz końce do współrzędnych ekranu
@@ -3027,7 +3074,7 @@ function drawPlayer() {
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, SW, floorY(p.r) + 1); ctx.clip();
     y += Math.min(22, p.sink * 11);
   }
-  drawFig(x, y, fdir, a, STY.hero, { blade, ign, bc: game.blade, trail: tr, own: p, sway });
+  drawFig(x, y, fdir, a, STY.hero, { blade, ign, bc: game.blade, trail: tr, own: p, sway, dbl: game.blade.dbl, dual: game.blade.dual });
   if (sink) ctx.restore();
   ctx.globalAlpha = 1;
   // Tarcza aury – pulsująca kopuła
@@ -3263,6 +3310,16 @@ function drawDynamic() {
       ctx.fillStyle = '#a87c4a'; ctx.fillRect(bx + 1, by + 1, 14, 1);
       ctx.fillStyle = '#c8a040'; ctx.fillRect(bx + 3, by + 6, 3, 2); ctx.fillRect(bx + 10, by + 6, 3, 2);
       ctx.fillStyle = '#2a2a30'; ctx.fillRect(bx + 7, by + 5, 2, 4);
+    } else if (ch === 'C') {
+      // Kryształ ostrza – większy, mieni się barwą rozdziału
+      const b = chapBlade(), cx = x + 16, cy = fy - 11 + Math.sin(game.anim * 2.4 + c) * 2, s = 1 + Math.sin(game.anim * 6) * 0.08;
+      poly([[cx, cy - 8 * s], [cx + 4.5 * s, cy], [cx, cy + 8 * s], [cx - 4.5 * s, cy]], b.col);
+      poly([[cx, cy - 8 * s], [cx + 4.5 * s, cy], [cx, cy]], '#ffffff');
+      for (let i = 0; i < 3; i++) {
+        const a = game.anim * 2 + i * 2.1;
+        dot(cx + Math.cos(a) * 9, cy + Math.sin(a) * 4, 0.8, b.col);
+      }
+      EQ.push({ x: cx, y: cy, col: b.col, r: 18 + Math.sin(game.anim * 5) * 3, a: 0.6, rgb: b.rgb });
     } else if (ch === 'O') {
       // Kryształ energii (unosi się i pulsuje)
       const cx = x + 16, cy = fy - 8 + Math.sin(game.anim * 3 + c) * 1.5;
@@ -3526,7 +3583,7 @@ function hint() {
   const shooter = FOES.some(f => f.alive && f.k !== 'lord' && f.r === p.r && (f.st === 'aim' || f.st === 'fire'));
   if (FIGHTST.includes(p.st) || p.st === 'hurt') {
     if (shooter && !engaged()) return 'Strzelec! A – cięcie odbija strzały · S schowaj';
-    return 'A cios (' + (skl('combo') + 1) + '× kombo) · ↑ zasłona · ↑+←→ skok · ←→ krok' + (p.drawn ? ' · S schowaj' : '');
+    return 'A cios (' + (comboMax() + 1) + '× kombo) · ↑ zasłona · ↑+←→ skok · ←→ krok' + (p.drawn ? ' · S schowaj' : '');
   }
   if (ch === 'W') return 'A – podnieś rękojeść';
   if (ch === 'H' || ch === 'M') return 'A – wypij miksturę';
@@ -3581,8 +3638,8 @@ function drawHUD() {
     const col = f.k === 'lord' ? '#ff3040' : f.k === 'rifle' ? '#f0a020' : '#80a0f0', sp = f.max > 6 ? 7 : 9;
     for (let i = 0; i < f.max; i++) tri(SW - 11 - i * sp, 187, i < f.hp && f.alive, col, '#302030');
   }
-  const s = msg.t > 0 ? msg.text : hint();
-  txt(s, SW / 2, 190, msg.t > 0 ? '#f0d890' : '#a0a0b0', 'center', s.length > 44 ? 6.5 : 8);
+  const s = game.mode === 'gear' ? '' : msg.t > 0 ? msg.text : hint();
+  if (s) txt(s, SW / 2, 190, msg.t > 0 ? '#f0d890' : '#a0a0b0', 'center', s.length > 44 ? 6.5 : 8);
   const m = Math.floor(game.time / 60), sec = Math.floor(game.time % 60);
   txt(m + ':' + String(sec).padStart(2, '0'), SW - 4, 6, '#c8c0d8', 'right');
   txt('◆ ' + game.crys, SW - 30, 6, '#80e0ff', 'right', 7);
@@ -3632,6 +3689,7 @@ function draw() {
   TQ = []; BQ = []; EQ = [];
   ctx.setTransform(RS, 0, 0, RS, 0, 0);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  if (game.mode === 'story') { drawStory(); drawToast(); drawText(); return; }
   if (game.mode === 'trans') {
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, SW, SH);
     const k = Math.min(1, game.trans / 0.6, (2.4 - game.trans) / 0.4);
@@ -3644,6 +3702,7 @@ function draw() {
       txt(n.name, SW / 2, 104, `rgba(232,216,176,${k})`, 'center', 9);
     }
     if (n.ship) txt('←→↑↓ ster · A działa · Z/X manewr', SW / 2, 124, `rgba(160,170,200,${k})`, 'center', 7);
+    drawToast();
     drawText();
     return;
   }
@@ -3651,6 +3710,8 @@ function draw() {
     drawShip();
     if (game.mode === 'win') { ctx.setTransform(RS, 0, 0, RS, 0, 0); drawWin(); }
     if (flash) { ctx.globalAlpha = Math.min(0.5, flash.t * 3); ctx.fillStyle = flash.col; ctx.fillRect(0, 0, SW, 180); ctx.globalAlpha = 1; }
+    ctx.setTransform(RS, 0, 0, RS, 0, 0);
+    drawToast();
     drawText();
     return;
   }
@@ -3691,6 +3752,8 @@ function draw() {
   }
   if (game.mode === 'win') drawWin();
   if (game.mode === 'tree') drawTree();
+  if (game.mode === 'gear') drawGear();
+  drawToast();
   drawText();
 }
 
@@ -3734,11 +3797,13 @@ function drawWin() {
   {
     ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, SW, 180);
     const m = Math.floor(game.time / 60), sec = Math.floor(game.time % 60);
-    txt('SAGA UKOŃCZONA', SW / 2, 56, '#f0c040', 'center', 14);
-    txt('Arcylord i jego pięciu uczniów upadli.', SW / 2, 76, '#e8d8b0', 'center', 7.5);
-    txt('Cytadela, Sarrak, Thalos, Krio, Verdan i Ignis są wolne.', SW / 2, 86, '#e8d8b0', 'center', 7);
-    txt('Czas: ' + m + ':' + String(sec).padStart(2, '0') + '   Życie: ' + P.hp + '/' + P.max + '   Kryształy: ' + game.crys, SW / 2, 100, '#e8d8b0');
-    txt('A – zagraj ponownie', SW / 2, 124, '#a0a0b0');
+    txt('SAGA UKOŃCZONA', SW / 2, 52, game.path === 'dark' ? '#ff6050' : '#f0c040', 'center', 14);
+    const E = ENDING[game.path === 'dark' ? 'dark' : 'light'];
+    let y = 70;
+    for (const s of E) for (const l of wrapTxt(s, 280, 7)) { txt(l, SW / 2, y, '#e8d8b0', 'center', 7); y += 10; }
+    txt('Czas: ' + m + ':' + String(sec).padStart(2, '0') + '   Życie: ' + P.hp + '/' + P.max + '   Kryształy: ' + game.crys, SW / 2, y + 8, '#e8d8b0');
+    txt('★ ' + ACHV.filter(a => META.achv[a[0]]).length + '/' + ACHV.length + ' osiągnięć', SW / 2, y + 20, '#f0c040', 'center', 6.5);
+    txt('A – menu główne', SW / 2, y + 36, '#a0a0b0');
   }
 }
 
@@ -3765,6 +3830,7 @@ function frame(t) {
 
 loadLevel(0);
 game.mode = 'title';
+buildMenu();
 requestAnimationFrame(frame);
 
 // Uchwyt do testów automatycznych (konsola / Node)

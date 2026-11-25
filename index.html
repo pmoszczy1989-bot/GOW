@@ -17,10 +17,14 @@
   #full { position: absolute; top: max(6px, env(safe-area-inset-top)); right: max(6px, env(safe-area-inset-right));
     z-index: 6; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .3);
     background: rgba(20, 20, 30, .55); color: #e8d8b0; font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
-  #full:hover, #treeb:hover { background: rgba(240, 192, 64, .3); }
+  #full:hover, #treeb:hover, #gearb:hover { background: rgba(240, 192, 64, .3); }
   #treeb { position: absolute; top: max(6px, env(safe-area-inset-top)); right: calc(max(6px, env(safe-area-inset-right)) + 40px);
     z-index: 6; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(120, 220, 255, .4);
     background: rgba(20, 20, 30, .55); color: #7fe0ff; font-size: 18px; line-height: 1; cursor: pointer; padding: 0; }
+
+  #gearb { position: absolute; top: max(6px, env(safe-area-inset-top)); right: calc(max(6px, env(safe-area-inset-right)) + 80px);
+    z-index: 6; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(240, 192, 64, .45);
+    background: rgba(20, 20, 30, .55); color: #f0c040; font-size: 18px; line-height: 1; cursor: pointer; padding: 0; }
 
   /* Dolny pasek z podpowiedziami klawiszy (komputer) */
   #keys { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; flex-wrap: wrap; justify-content: center;
@@ -44,6 +48,14 @@
   #title .mob { display: none; }
   body.touch #title .pc { display: none; }
   body.touch #title .mob { display: block; }
+  #menu { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 10px 0 4px; }
+  #menu button { font: bold 14px "Segoe UI", Tahoma, sans-serif; color: #e8d8b0; background: #1a1a26; border: 1px solid #4a4a5e;
+    border-radius: 6px; padding: 7px 16px; cursor: pointer; min-width: 240px; }
+  #menu button.main { border-color: #f0c040; color: #f0c040; }
+  #menu button:hover { background: #2a2a3a; }
+  #menu .chap button { min-width: 0; padding: 4px 10px; margin: 0 2px; }
+  #menu .chap, #menu .stat { color: #a89878; font-size: 13px; }
+  #menu kbd { font-size: 11px; }
   @keyframes blink { 50% { opacity: .3; } }
 
   /* Sterowanie dotykowe: gałka w lewym dolnym rogu, przyciski akcji w prawym */
@@ -87,6 +99,7 @@
 <canvas id="txt"></canvas>
 <button id="full" title="Pełny ekran (F)">⛶</button>
 <button id="treeb" title="Drzewko umiejętności (U)">✦</button>
+<button id="gearb" title="Kolekcja ostrzy i osiągnięcia (O)">◈</button>
 
 <div id="title">
   <div class="box">
@@ -102,12 +115,14 @@
       <kbd>A</kbd> wyciągnij ostrze i tnij (odbija strzały) / podnieś / użyj &nbsp; <kbd>S</kbd> schowaj ostrze<br>
       <kbd>Z</kbd> <kbd>X</kbd> moce aury w dwóch slotach (na start: przyciągnięcie + QTE <kbd>A</kbd> i odepchnięcie)<br>
       <kbd>U</kbd> drzewko umiejętności: pioruny, uścisk, tarcza, omamienie, leczenie, rzut ostrzem, kombinacje, zwinność<br>
+      <kbd>O</kbd> kolekcja ostrzy (6 ukrytych kryształów ◆ – po jednym na rozdział) i osiągnięcia &nbsp; Gra zapisuje się na początku każdego poziomu<br>
       Pod wodą <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> pływanie (pilnuj tlenu) &nbsp; <kbd>R</kbd> powtórz poziom &nbsp; <kbd>F</kbd> pełny ekran
     </p>
     <p class="mob">Gałka w lewym dolnym rogu – ruch (lekkie wychylenie = ostrożny krok).<br>
-      Przyciski po prawej: ostrze / cios, skok, dwie moce (sloty), schowanie ostrza. ✦ u góry – drzewko umiejętności.<br>
+      Przyciski po prawej: ostrze / cios, skok, dwie moce (sloty), schowanie ostrza. ✦ u góry – drzewko umiejętności, ◈ – kolekcja ostrzy i osiągnięcia.<br>
       Najlepiej grać poziomo i w pełnym ekranie (⛶).</p>
-    <p class="go"><span class="pc">Naciśnij dowolny klawisz</span><span class="mob">Dotknij ekranu, aby zacząć</span></p>
+    <div id="menu"></div>
+    <p class="go"><span class="pc">Enter – start</span><span class="mob">Dotknij ekranu, aby zacząć</span></p>
   </div>
 </div>
 
@@ -120,6 +135,7 @@
   <span><kbd>S</kbd>schowaj</span>
   <span><kbd>Z</kbd><kbd>X</kbd>moce (sloty)</span>
   <span><kbd>U</kbd>drzewko umiejętności</span>
+  <span><kbd>O</kbd>kolekcja</span>
   <span><kbd>R</kbd>restart</span>
   <span><kbd>F</kbd>pełny ekran</span>
 </div>
@@ -149,8 +165,9 @@
   </div>
 </div>
 
-<script src="levels.js?v=13"></script>
-<script src="game.js?v=13"></script>
-<script src="ship.js?v=13"></script>
+<script src="meta.js?v=14"></script>
+<script src="levels.js?v=14"></script>
+<script src="game.js?v=14"></script>
+<script src="ship.js?v=14"></script>
 </body>
 </html>

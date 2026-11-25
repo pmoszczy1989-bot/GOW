@@ -116,7 +116,7 @@ function shHurt(n) {
   const S = SHIP;
   if (S.dead || S.inv > 0 || S.roll > 0 || S.phase === 'jump' || S.phase === 'won') return false;
   S.hp = Math.max(0, S.hp - (n || 1));
-  S.inv = 1;
+  S.inv = 1; game.hurtLvl++;
   shake(4); flash = { col: '#ff2020', t: 0.12 };
   shSparks(S.x, S.y, 12, '255,170,90', 90);
   SND.hit();

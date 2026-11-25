@@ -31,6 +31,7 @@ w prawym przyciski z ikonami: ostrze/cios, skok, przyciągnięcie, odepchnięcie
 | Z / X | moc z 1. / 2. slotu (start: Przyciąganie / Odepchnięcie); po przyciągnięciu wroga szybko **A** = cios aury |
 | U | drzewko umiejętności (←→↑↓ wybór, A – ulepsz, Z/X – przypisz moc do slotu, Esc/U – zamknij) |
 | ↑ w walce | zasłona – odbija strzały i paruje ciosy |
+| O | kolekcja ostrzy i osiągnięcia (←→↑↓ wybór, A – załóż ostrze, O/Esc – zamknij) |
 | R | powtórz poziom |
 | F | pełny ekran |
 
@@ -62,7 +63,7 @@ Każdy kolejny poziom jest trochę trudniejszy (więcej i silniejszych wrogów, 
 
 Legenda: `_` podłoga · spacja – brak podłogi (w dolnym rzędzie przepaść, pod wodą dno) · `#` mur ·
 `L` luźna płyta · `S` kolce · `W` rękojeść · `H` mikstura · `M` duża mikstura · `P` płyta naciskowa ·
-`G` krata · `D` drzwi · `B` skrzynia · `O` kryształ · `T` terminal · `K` konsola · `E` bariera energetyczna ·
+`G` krata · `D` drzwi · `B` skrzynia · `O` kryształ · `C` kryształ ostrza (jeden na rozdział) · `T` terminal · `K` konsola · `E` bariera energetyczna ·
 `Q` ruchome piaski · `U` wylot powietrza · `N` mina podwodna · `I` lód (ślizga się) · `J` grzyb-trampolina ·
 `F` dysza ognia (parzy co kilka sekund) · `V` lawa (śmierć). Motywy `theme` 0–11.
 Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0, c1, sp }` (szerokie, 52 px),
@@ -100,17 +101,27 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
 - Lód `I` ślizga się, grzyb `J` wybija wysoko, dysza `F` zieje ogniem cyklicznie, lawa `V` zabija.
 - Ruchome piaski `Q` spowalniają i wciągają – nie zatrzymuj się. Miny `N` wybuchają przy dotyku (cięcie pod wodą je rozbraja).
 - Krata otwiera się po naciśnięciu płyty, konsola `K` wyłącza bariery i blokuje kratę w górze.
+- **Zapis**: gra zapisuje się na początku każdego poziomu (`localStorage` `gow_save`). Menu tytułowe: *Kontynuuj*,
+  *Nowa gra* (N), wybór odblokowanego rozdziału (1–6). Postęp trwały – osiągnięcia, ostrza, rekordy – w `gow_meta`.
+- **Kolekcja ostrzy** (**O**): kolory bazowe (rękojeść losuje nieczerwony kolor, pokonany Lord zostawia nowy) oraz
+  6 ostrzy specjalnych z ukrytych kryształów `C` (po jednym na rozdział): bursztynowe (szybsza aura),
+  srebrne (dłuższy zasięg), turkusowe (dwa ostrza, +1 kombo), różane (+1 kryształ za wroga),
+  złote (szansa na podwójne obrażenia), pryzmatyczne (zmienia kolor, tańsze moce).
+- **Osiągnięcia** (17) – wyskakują jako komunikat u góry ekranu, lista w kolekcji.
+- **Fabuła**: przekazy holograficzne Ael przed każdym rozdziałem. Pioruny i uścisk przybliżają ku ciemności;
+  w finale wybierasz zakończenie (światło / gniew).
 
 ## Pliki
 
 | Plik | Opis |
 |---|---|
 | `index.html` | płótna, ekran tytułowy, przycisk ⛶, pasek klawiszy `#keys`, sterowanie dotykowe `#touch` (`#stick`/`#knob`, `button[data-k]`); ładuje skrypty `?v=N` |
-| `levels.js` | `LEVELS` – definicje poziomów i komnat (ładowany pierwszy) |
+| `meta.js` | zapis (`saveRun`/`runSave`), menu tytułowe (`buildMenu`), kolekcja ostrzy (`XBLADES`, `drawGear`), osiągnięcia (`ACHV`/`achv`), fabuła (`STORY`, `showStory`) – ładowany pierwszy |
+| `levels.js` | `LEVELS` – definicje poziomów i komnat |
 | `game.js` | silnik: wejście (klawiatura, dotyk, pełny ekran), stan, komnaty, fizyka, gracz, wrogowie, aura, QTE, pływanie, pułapki, rysowanie, światło, dźwięk, pętla |
 | `ship.js` | poziomy lotu statkiem (`startShip`, `updShip`, `drawShip`, `shipHint`, `SHIP`) |
 
-Kolejność skryptów: `levels.js → game.js → ship.js`.
+Kolejność skryptów: `meta.js → levels.js → game.js → ship.js`.
 
 Kluczowe funkcje: `loadLevel`, `mkRoom`/`enterRoom`/`roomCheck` (komnaty), `update(dt)` (krok 1/60 s),
 `updPlayer`, `SKILLS`/`skl`/`drawTree` (drzewko, sloty `game.slots`), `auraPull`/`auraPush`/`updQte`, `ventOn`, `startSwim`/`updO2`, `updPlats`, `updMines`, `startFinisher`,
@@ -135,4 +146,4 @@ for (let i = 0; i < GOW.LEVELS.length; i++) {
 }
 ```
 
-Szybka kontrola składni: `node --check game.js levels.js ship.js` (każdy plik osobno).
+Szybka kontrola składni: `node --check meta.js game.js levels.js ship.js` (każdy plik osobno).
