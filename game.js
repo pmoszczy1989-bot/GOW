@@ -33,6 +33,9 @@ const lerp = (a, b, k) => a + (b - a) * k;
 const ease = k => 1 - (1 - k) * (1 - k);
 const HANGST = ['hang', 'climb', 'climbdown', 'reach'];
 const FIGHTST = ['fight', 'fstep', 'strike', 'block', 'fin'];
+// Bufor wejścia: stany, w których wciśnięcie czeka (BUSYST), i stany, które je wykonują (READYST)
+const BUSYST = ['turn', 'land', 'upjump', 'use', 'hurt', 'block', 'power'];
+const READYST = ['stand', 'run', 'step', 'fight', 'fstep'];
 
 // ===== Płótno i skalowanie =====
 const cv = document.getElementById('game');
@@ -705,7 +708,7 @@ function hurtPlayer(n, pushDir, kind) {
 
 function startFall(vx) {
   P.st = 'fall'; P.t = 0; P.air = true; P.vy = 0; P.vx = vx; P.fallY = floorY(P.r);
-  P.coy = 0.12; P.lvx = vx; P.dj = skl('agil') >= 3;      // „czas kojota” – skok tuż po zejściu z krawędzi
+  P.coy = 0.15; P.lvx = vx; P.dj = skl('agil') >= 3;      // „czas kojota” – skok tuż po zejściu z krawędzi
 }
 
 // Porażenie barierą energetyczną – odrzut i utrata życia
@@ -746,10 +749,10 @@ function ledgeGrab() {
   const d = Math.sign(P.vx) || P.dir, c = colOf(P.x);
   for (let r = 0; r < ROWS; r++) {
     const hy = floorY(r) + HANG_DY;
-    if (Math.abs(P.y - hy) > 12 || P.vy < 0 || P.fallY > floorY(r) + 5) continue;
+    if (Math.abs(P.y - hy) > 16 || P.vy < 0 || P.fallY > floorY(r) + 5) continue;
     if (hasFloor(r, c) || isWall(r, c) || !hasFloor(r, c + d) || isWall(r, c + d)) continue;
     const ex = d > 0 ? (c + 1) * TW : c * TW;
-    if (Math.abs(ex - P.x) > 14) continue;
+    if (Math.abs(ex - P.x) > 18) continue;
     P.dir = d; P.hang = { r, ex }; P.air = false; P.vx = P.vy = 0; P.as = 0;
     P.x = ex - d * HW; P.y = hy; P.r = r; P.st = 'hang'; P.t = 0;
     SND.thud(); burst(ex, floorY(r), 5, '#a89878', 30, 10);
@@ -800,6 +803,7 @@ function landP(r) {
   else P.ld = 0.06;
   // Bufor skoku: ↑ wciśnięte tuż przed lądowaniem → od razu kolejny skok
   if (P.jb > 0 && P.st === 'land' && rows <= 1 && K[P.dir > 0 ? 'right' : 'left']) jump(K.walk ? 90 : 130);
+  else if (P.jb > 0 && P.st === 'land') P.bup = 0.25;   // bez kierunku – ↑ wykona się po lądowaniu
 }
 
 function tryUp() {
@@ -820,7 +824,7 @@ function tryHangDown() {
     const nc = c + s;
     if (nc < 0 || nc >= COLS || hasFloor(r, nc) || isWall(r, nc) || isWall(r + 1, nc)) continue;
     const ex = s > 0 ? (c + 1) * TW : c * TW;
-    if (Math.abs(ex - P.x) > 16) continue;
+    if (Math.abs(ex - P.x) > 22) continue;
     P.dir = -s; P.hang = { r, ex };
     P.st = 'climbdown'; P.t = 0;
     P.x = ex + s * HW; P.y = floorY(r) + HANG_DY;
@@ -1531,9 +1535,18 @@ function updPlayer(dt) {
     startFall(0);
   }
   const fwd = p.dir > 0 ? K.right : K.left, back = p.dir > 0 ? K.left : K.right;
+  // Bufor wejścia: ↑ / A wciśnięte w trakcie krótkiej animacji (lądowanie, obrót, cios…) wykonuje się zaraz po niej
+  for (const k of ['up', 'act']) {
+    const bk = 'b' + k;
+    if (PR[k]) p[bk] = BUSYST.includes(p.st) ? 0.25 : 0;
+    else if (p[bk] > 0) {
+      if (!BUSYST.includes(p.st)) p[bk] -= dt;
+      if (READYST.includes(p.st)) { PR[k] = true; p[bk] = 0; }
+    }
+  }
   if (p.st === 'dead' || HANGST.indexOf(p.st) >= 0) p.drawn = false;
   const lit = p.sword && !p.thr && (FIGHTST.includes(p.st) || (p.st === 'hurt' && (p.drawn || engaged())) ||
-    (p.drawn && ['jump', 'fall', 'land', 'power'].includes(p.st)) || (p.as > 0));
+    (p.drawn && ['jump', 'fall', 'land', 'power', 'run', 'turn'].includes(p.st)) || (p.as > 0));
   p.ign = Math.max(0, Math.min(1, p.ign + (lit ? 3.6 : -3) * dt));   // ostrze wysuwa się ~0,28 s, chowa ~0,33 s
   // Kryształ zbierany w biegu
   if (!p.air && p.st !== 'dead' && HANGST.indexOf(p.st) < 0 && cell(p.r, colOf(p.x)) === 'O' &&
@@ -1555,6 +1568,7 @@ function updPlayer(dt) {
           break;
         }
         if (fwd) { jump(90); break; }
+        if (back) { p.dir = -p.dir; jump(90); break; }   // ↑ + kierunek do tyłu – skok z obrotem
         if (!tryUp()) { p.st = 'upjump'; p.t = 0; }
         break;
       }
@@ -1568,7 +1582,13 @@ function updPlayer(dt) {
       if (fwd && !foeAhead(p.dir)) { p.st = K.walk ? 'step' : 'run'; p.t = 0; }
       break;
     }
-    case 'turn': if (p.t > 0.12) p.st = 'stand'; break;
+    case 'turn':
+      // Szybki obrót; trzymany kierunek od razu przechodzi w bieg
+      if (p.t > 0.08) {
+        p.st = 'stand';
+        if (fwd && !foeAhead(p.dir) && !(p.sword && engaged())) { p.st = K.walk ? 'step' : 'run'; p.t = 0; }
+      }
+      break;
     case 'use': if (p.t > 0.45) p.st = 'stand'; break;
     case 'run': {
       const t = p.sword && engaged();
@@ -1668,7 +1688,8 @@ function updPlayer(dt) {
       // ↑ + kierunek – skok z wyciągniętym ostrzem; samo ↑ – blok
       if (PR.up && (f || b)) { if (b && !t) p.dir = -p.dir; jump(f || !t ? 120 : -100); break; }
       if (PR.up) { p.st = 'block'; p.t = 0; break; }
-      if (!t && (p.dir > 0 ? PR.left : PR.right)) { p.dir = -p.dir; break; }   // bez przeciwnika – obrót
+      if (!t && b) { p.dir = -p.dir; break; }   // bez przeciwnika – obrót
+      if (!t && f && !K.walk && !foeAhead(p.dir)) { p.st = 'run'; p.t = 0; break; }   // bez przeciwnika – bieg z ostrzem
       if (f || b) { p.st = 'fstep'; p.t = 0; p.fd = f ? 1 : -1; }
       break;
     }
@@ -1689,7 +1710,7 @@ function updPlayer(dt) {
       const big = p.combo >= 3, hitT = big ? 0.16 : 0.12, end = big ? 0.42 : 0.34;
       if (p.combo === 3) moveX(p, p.dir * 20 * dt, p.r);
       if (p.combo === 4 && p.t > 0.08 && p.t < 0.18) { moveX(p, p.dir * 80 * dt, p.r); if (!groundCheck(false)) break; }
-      if (PR.act && p.t > 0.1) p.q = true;
+      if (PR.act && p.t > 0.04) p.q = true;
       if (!p.hit && p.t >= hitT) { p.hit = true; resolveStrike(); }
       if (p.q && p.t >= hitT + 0.12 && p.combo < comboMax()) { startStrike(true); break; }
       if (p.t > end) p.st = afterFight();
@@ -1725,7 +1746,7 @@ function updPlayer(dt) {
       if (PR.up) {
         if (p.st === 'fall' && p.coy > 0 && p.vy < 80) { jump(K.walk ? 90 : (K.left || K.right) ? 130 : 60); break; }
         if (p.dj && p.t > 0.08) airJump();
-        else p.jb = 0.18;
+        else p.jb = 0.22;
       }
       // Sterowanie w locie: lekka korekta wokół prędkości wybicia
       const want = K.right ? 1 : K.left ? -1 : 0;
@@ -3008,7 +3029,7 @@ function drawPlayer() {
     return;
   }
   switch (p.st) {
-    case 'run': a = gait(POSE.run1, p.ph, true, true); sway = 3 + Math.sin(p.ph * Math.PI * 2) * 1.5; break;
+    case 'run': a = gait(POSE.run1, p.ph, true, true); sway = 3 + Math.sin(p.ph * Math.PI * 2) * 1.5; if (p.drawn && p.ign > 0.02) blade = 'hand'; break;
     case 'step': a = gait(POSE.stand, p.ph, false, true); break;
     case 'power': {
       const k = Math.min(1, p.t / 0.1);

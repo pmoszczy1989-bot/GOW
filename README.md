@@ -95,7 +95,10 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
   *Ostrze* – Kombinacje (seria 2–5 cięć), Zwinność (dalsze skoki, miękkie lądowanie, podwójny skok),
   Rzut ostrzem, Skupienie (regeneracja aury); *Gniew* – Przyciąganie, Uścisk (duszenie), Pioruny aury.
   Pod klawiszami Z i X można mieć maksymalnie **dwie moce**.
-- Skoki: chwilowy zapas po zejściu z krawędzi i zapamiętanie wciśnięcia ↑ przed lądowaniem, chwyt krawędzi w locie.
+- Skoki: chwilowy zapas po zejściu z krawędzi (0,15 s) i zapamiętanie wciśnięcia ↑ przed lądowaniem, chwyt krawędzi w locie (z większą tolerancją).
+- Wygodne sterowanie: **bufor wejścia** – ↑ lub A wciśnięte w trakcie lądowania, obrotu, zasłony czy użycia wykonuje się zaraz po animacji;
+  szybki obrót przechodzi od razu w bieg; ↑ + kierunek do tyłu = skok z obrotem; z wyciągniętym ostrzem i bez wroga
+  można biegać i zawracać; kolejny cios serii można wcisnąć wcześniej.
 - Ostatni cios uruchamia finiszer w zwolnionym tempie – bez krwi (iskry, rozcięta broń, żar).
 - Woda: pod wodą ubywa tlenu (pasek O₂); uzupełnia go powierzchnia i wylot `U`. Bez tlenu tracisz życie.
 - Lód `I` ślizga się, grzyb `J` wybija wysoko, dysza `F` zieje ogniem cyklicznie, lawa `V` zabija.
