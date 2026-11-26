@@ -125,6 +125,8 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
   *Ostrze* – Kombinacje (seria 2–5 cięć), Zwinność (dalsze skoki, miękkie lądowanie, podwójny skok),
   Rzut ostrzem, Skupienie (regeneracja aury); *Gniew* – Przyciąganie, Uścisk (duszenie), Pioruny aury, Witalność (bez wymagań, +1 maks. życie na poziom, do +4 – liczy się osobno od wielkich mikstur).
   Pod klawiszami Z i X można mieć maksymalnie **dwie moce**.
+- **Hamowanie w locie**: kierunek przeciwny do skoku skraca lot (mega skok nawet do ~10% prędkości) – tak trafisz na ruchomą platformę lub wąską półkę;
+  lądowanie wybacza też przelot do 10 px za krawędź podłogi lub platformy.
 - Skoki: chwilowy zapas po zejściu z krawędzi (0,15 s) i zapamiętanie wciśnięcia ↑ przed lądowaniem, chwyt krawędzi w locie (z większą tolerancją).
 - Wygodne sterowanie: **bufor wejścia** – ↑ lub A wciśnięte w trakcie lądowania, obrotu, zasłony czy użycia wykonuje się zaraz po animacji;
   szybki obrót przechodzi od razu w bieg; ↑ + kierunek do tyłu = skok z obrotem; z wyciągniętym ostrzem i bez wroga

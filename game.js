@@ -674,6 +674,14 @@ function air(o, dt) {
         o.y = fy; o.r = r; o.air = false; o.vy = 0;
         return r;
       }
+      // Gracz tuż za krawędzią podłogi / platformy (do 10 px) – ląduje na jej brzegu zamiast przelecieć
+      if (o === P && py <= fy && o.y >= fy) {
+        const d = -(Math.sign(o.vx) || o.dir || 1);
+        for (let k = 3; k <= 10; k += 3.5) {
+          const nx = o.x + d * k;
+          if (floorAt(r, nx) && moveX(o, nx - o.x, r)) { o.y = fy; o.r = r; o.air = false; o.vy = 0; return r; }
+        }
+      }
     }
   }
   if (o.y > SH + 60) { o.air = false; return ROWS; }
@@ -1993,7 +2001,11 @@ function updPlayer(dt) {
       }
       // Sterowanie w locie: lekka korekta wokół prędkości wybicia
       const want = K.right ? 1 : K.left ? -1 : 0;
-      if (want) {
+      if (want && p.lvx && want !== Math.sign(p.lvx)) {
+        // Hamowanie w locie (kierunek przeciwny) – pozwala skrócić skok, zwłaszcza mega skok, i trafić na platformę
+        const keep = p.mega ? 0.1 : 0.35, mn = Math.abs(p.lvx) * keep;
+        p.vx = Math.sign(p.lvx) * Math.max(mn, Math.abs(p.vx) - (p.mega ? 420 : 260) * dt);
+      } else if (want) {
         const ac = p.mega ? 40 : 25, lo = p.lvx - ac, hi = p.lvx + ac;   // korekta w locie (mniejsza przy zwykłym skoku)
         p.vx = Math.max(lo, Math.min(hi, p.vx + want * 260 * dt));
         if (Math.sign(want) !== p.dir && p.lvx === 0) p.dir = want;
