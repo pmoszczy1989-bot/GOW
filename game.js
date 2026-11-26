@@ -1329,7 +1329,7 @@ function startLock(f) {
   game.qte = null; game.finName = '';
   game.lock = { f, seq, i: 0, t: 0, tot: 0, win, used: [], pre: 1.3 };   // pre – zapowiedź sekwencji
   SND.clash(); shake(3); flash = { col: '#ffffff', t: 0.1 };
-  say('ZWARCIE OSTRZY! Przygotuj się...', 1.4);
+  say('ZWARCIE OSTRZY!', 1.4);
   return true;
 }
 function endLock() {
@@ -4158,7 +4158,7 @@ function drawHUD() {
   const L = game.lock;
   if (L) {
     const n = L.seq.length, w = 18, x0 = SW / 2 - n * w / 2, y = 30;
-    txt(L.pre > 0 ? 'PRZYGOTUJ SIĘ… ' + Math.ceil(L.pre) : 'ZWARCIE OSTRZY', SW / 2, y - 6, L.pre > 0 ? '#80e0ff' : '#ffe0a0', 'center', 9);
+    txt(L.pre > 0 ? 'ZWARCIE… ' + Math.ceil(L.pre) : 'ZWARCIE OSTRZY', SW / 2, y - 6, L.pre > 0 ? '#80e0ff' : '#ffe0a0', 'center', 9);
     L.seq.forEach((k, i) => {
       const x = x0 + i * w + 2, cur = i === L.i && !(L.pre > 0), done = i < L.i;
       rrect(x, y, w - 4, 14, 2, done ? '#1e5a34' : cur ? '#34487e' : '#181a28');

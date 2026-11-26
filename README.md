@@ -93,7 +93,7 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
   W walce szybkie wciśnięcie kierunku do tyłu obraca bohatera ku pomocnikowi (dronowi) za plecami.
 - **Zwarcie ostrzy** (tylko Lordowie): gdy zasłonisz się przed ciosem, Lord sparuje twój cios albo sam naciera,
   ostrza mogą się sczepić. Świat prawie staje, a nad sceną pojawia się sekwencja klawiszy:
-  **A** cięcie, **↑** nacisk, **Z**/**X** moc ze slotu (3–4 klawisze). Najpierw zapowiedź „PRZYGOTUJ SIĘ” (1,3 s) pokazuje całą sekwencję,
+  **A** cięcie, **↑** nacisk, **Z**/**X** moc ze slotu (3–4 klawisze). Najpierw zapowiedź „ZWARCIE” z odliczaniem (1,3 s) pokazuje całą sekwencję,
   potem każdy klawisz trzeba wcisnąć w oknie 1–1,8 s (krótszym na późniejszych planetach i w furii, dłuższym ze Skupieniem).
   Wygrana zadaje 2 obrażenia (3 przy co najmniej dwóch mocach). Nazwa i efekt finiszera zależą od mocy
   (np. „BURZA + FALA”: Fala odrzuca Lorda, Burza/Zwód/Uścisk ogłuszają, Odnowa leczy, Tarcza osłania).
