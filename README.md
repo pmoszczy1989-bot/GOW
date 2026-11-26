@@ -15,7 +15,7 @@ widać pasek z podpowiedziami klawiszy.
 **Telefon / tablet** – wykrywane automatycznie (dotyk + gruby wskaźnik albo brak myszy → klasa `body.touch`).
 Gra skaluje się do ekranu (w pionie jest u góry, sterowanie pod nią). W lewym dolnym rogu jest gałka
 (mocne wychylenie w bok – bieg, lekkie – ostrożny krok, w górę – skok, w dół – zwis/kucnięcie),
-w prawym przyciski z ikonami: ostrze/cios, skok, przyciągnięcie, odepchnięcie, schowanie ostrza.
+w prawym przyciski z ikonami: ostrze/cios, skok, przyciągnięcie, odepchnięcie, bieg aury, mega skok, schowanie ostrza.
 
 ## Sterowanie
 
@@ -24,6 +24,7 @@ w prawym przyciski z ikonami: ostrze/cios, skok, przyciągnięcie, odepchnięcie
 | ← → | bieg / obrót; pod wodą – pływanie |
 | Shift + ← → | ostrożny krok (zatrzymuje się na krawędzi i przed kolcami) |
 | D + ← → (trzymaj) | bieg aury: ~1,9× szybciej, przez ruchome piaski bez grzęźnięcia, skok z biegu o 35% dalej (−10 aury); zużywa aurę, przycisk ⏩ na dotyku |
+| C | **mega skok** aury (−20 aury): znacznie dalej niż zwykły skok – potrzebny nad przepaściami szerszymi niż 3 kafle (podpowiedź na dole); przycisk ⤴ na dotyku |
 | ↑ | skok w górę / podciągnięcie / wyjście przez drzwi; z rozbiegu – skok w dal; w powietrzu (Zwinność 3) – podwójny skok; pod wodą – w górę, przy brzegu – wyjście |
 | ↑ + ← → w walce | skok z wyciągniętym ostrzem (A w powietrzu = cięcie z wyskoku) |
 | ↓ | kucnięcie (unik strzału); przy krawędzi – zwis; w zwisie – puszczenie; pod wodą – w dół |
@@ -63,7 +64,7 @@ wyjście za krawędź ekranu przenosi do sąsiedniej. Definicje w `levels.js` (`
 Każdy kolejny poziom jest trochę trudniejszy (więcej i silniejszych wrogów, krótsze okna, więcej pułapek).
 
 Legenda: `_` podłoga · spacja – brak podłogi (w dolnym rzędzie przepaść, pod wodą dno) · `#` mur ·
-`L` luźna płyta · `S` kolce · `W` rękojeść · `H` mikstura · `M` duża mikstura · `P` płyta naciskowa ·
+`L` luźna płyta · `S` kolce · `W` rękojeść · `H` mikstura · `M` duża mikstura · `A` eliksir wigoru (zielony: +1 serce jednorazowo, znika przy pierwszej ranie lub z końcem poziomu) · `P` płyta naciskowa ·
 `G` krata · `D` drzwi · `B` skrzynia · `O` kryształ · `C` kryształ ostrza (jeden na rozdział) · `T` terminal · `K` konsola · `E` bariera energetyczna ·
 `Q` ruchome piaski · `U` wylot powietrza · `N` mina podwodna · `I` lód (ślizga się) · `J` grzyb-trampolina ·
 `F` dysza ognia (parzy co kilka sekund) · `V` lawa (śmierć) · `X` blok aury · `Y` dźwignia. Motywy `theme` 0–11.
@@ -85,16 +86,18 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
 - **Zagadki aury**: blok `X` przesuwasz odepchnięciem (pchnij) i przyciągnięciem (do siebie); wepchnięty w szczelinę
   tworzy most, postawiony na płycie `P` trzyma kratę otwartą. Dźwignię `Y` przestawisz klawiszem A albo przyciągnięciem z daleka.
 - **Droid BIP** (od rozdziału II) leci za tobą, co kilka sekund razi pobliskiego wroga i wskazuje ukryty kryształ ostrza w komnacie.
-- Lord (10 trafień) paruje i odskakuje. **Fazy**: od 7 żyć rzuca wirującym ostrzem, które wraca do ręki
-  (kucnij, żeby uniknąć; zasłona/cios odbija je w Lorda: −2), przy 5 wpada w furię i wzywa 2 drony,
-  od 3 sypie się strop – cień na podłodze ostrzega przed spadającym głazem.
+- Lord paruje i odskakuje. Pierwszy ma 5 żyć, każdy kolejny o 1 więcej (do 10). Pierwszy walczy sam, bez przeszkadzajek.
+  **Fazy** dochodzą z kolejnymi planetami: od 2. Lorda (przy 70% życia) rzut wirującym ostrzem, które wraca do ręki
+  (kucnij, żeby uniknąć; zasłona/cios odbija je w Lorda: −2), od 3. (przy 50%) furia i 2 drony,
+  od 4. (przy 30%) sypie się strop – cień na podłodze ostrzega przed spadającym głazem.
+  W walce szybkie wciśnięcie kierunku do tyłu obraca bohatera ku pomocnikowi (dronowi) za plecami.
 - **Zwarcie ostrzy** (tylko Lordowie): gdy zasłonisz się przed ciosem, Lord sparuje twój cios albo sam naciera,
   ostrza mogą się sczepić. Świat prawie staje, a nad sceną pojawia się sekwencja klawiszy:
-  **A** cięcie, **↑** nacisk, **Z**/**X** moc ze slotu. Każdy klawisz trzeba wcisnąć w krótkim oknie
-  (krótszym na późniejszych planetach i w furii, dłuższym ze Skupieniem). Dłuższe sekwencje daje rozwinięte Kombinacje.
-  Wygrana zadaje 2 obrażenia + 1 za każdą użytą moc (maks. 4). Nazwa i efekt finiszera zależą od mocy
+  **A** cięcie, **↑** nacisk, **Z**/**X** moc ze slotu (3–4 klawisze). Najpierw zapowiedź „PRZYGOTUJ SIĘ” (1,3 s) pokazuje całą sekwencję,
+  potem każdy klawisz trzeba wcisnąć w oknie 1–1,8 s (krótszym na późniejszych planetach i w furii, dłuższym ze Skupieniem).
+  Wygrana zadaje 2 obrażenia (3 przy co najmniej dwóch mocach). Nazwa i efekt finiszera zależą od mocy
   (np. „BURZA + FALA”: Fala odrzuca Lorda, Burza/Zwód/Uścisk ogłuszają, Odnowa leczy, Tarcza osłania).
-  Zły klawisz lub zwłoka: Lord przełamuje zwarcie i rani (−1).
+  Zły klawisz lub zwłoka: Lord przełamuje zwarcie i rani – tylko −1 życie, potem chwila ochrony.
 - **Aura działa bez ostrza** – od początku możesz przyciągać i odpychać (tylko Rzut ostrzem wymaga rękojeści).
 - **Dźwięk** syntezowany na żywo (WebAudio): buczenie zapalonego ostrza, „wuuum” przy cięciach, trzask zwarcia,
   „piu” blasterów, szum fali aury – w klimacie filmów, ale autorski.

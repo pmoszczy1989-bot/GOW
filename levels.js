@@ -69,14 +69,14 @@ const LEVELS = [
   { name: 'Sala Mrocznego Lorda', theme: 4, lock: true, start: { room: 0, r: 0, c: 1, dir: 1 },
     lore: 'Ostatni wpis: „Gdy Lord uderza w twoją zasłonę, na chwilę traci równowagę. Wtedy tnij.”',
     rooms: [
-      { map: ['#_O__ __T#',
+      { map: ['#_A__ __T#',
               '#H__ __B__',
               '#___P__ __'],
         foes: [{ k: 'rifle', r: 1, c: 7, dir: -1 }, { k: 'blaster', r: 2, c: 8, dir: -1 }] },
       { map: ['##########',
               '##___ __H#',
               'G________D'],
-        foes: [{ k: 'rifle', r: 1, c: 6, dir: -1 }, { k: 'lord', r: 2, c: 7, dir: -1 }] },
+        foes: [{ k: 'lord', r: 2, c: 7, dir: -1 }] },
     ] },
   { name: 'Ucieczka z orbity', ship: { diff: 0, from: 'cytadela', to: 'pustynia' } },
 
@@ -142,7 +142,7 @@ const LEVELS = [
   { name: 'Tron Pani Burz', theme: 6, lock: true, start: { room: 0, r: 0, c: 1, dir: 1 },
     lore: 'Kronika: „Pani Burz walczy ostrzem o dwóch końcach. Jej furia jest szybsza niż wiatr.”',
     rooms: [
-      { map: ['#_O__ ____',
+      { map: ['#_A__ ____',
               '#__T__ B__',
               '#H__ _____'],
         foes: [{ k: 'rifle', sty: 'raider', r: 1, c: 8, dir: -1 }, { k: 'blaster', sty: 'raider', r: 2, c: 7, dir: -1 }] },
@@ -216,7 +216,7 @@ const LEVELS = [
   { name: 'Leże Lorda Głębin', theme: 8, lock: true, start: { room: 0, r: 0, c: 1, dir: 1 },
     lore: 'Ostatni zapis: „Lord Głębin walczy dwoma ostrzami. Opiera się aurze, ale nie bez końca.”',
     rooms: [
-      { map: ['#T_O_ ___ ',
+      { map: ['#T_A_ ___ ',
               '#____ _ __',
               '#U_N__N___'], wl: 125,
         foes: [{ k: 'drone', r: 2, c: 5, dir: -1 }, { k: 'rifle', sty: 'aqua', r: 1, c: 3, dir: 1 }] },
@@ -285,7 +285,7 @@ const LEVELS = [
   { name: 'Tron Królowej Mrozu', theme: 9, lock: true, start: { room: 0, r: 0, c: 1, dir: 1 },
     lore: 'Kronika: „Królowa Mrozu walczy ostrzem o dwóch końcach. Jej cios zamraża oddech.”',
     rooms: [
-      { map: ['#_O__ ____',
+      { map: ['#_A__ ____',
               '#__T__ B__',
               '#H_II _II_'],
         foes: [{ k: 'rifle', sty: 'snow', r: 1, c: 8, dir: -1 }, { k: 'blaster', sty: 'snow', r: 2, c: 7, dir: -1 }] },
@@ -354,7 +354,7 @@ const LEVELS = [
   { name: 'Gniazdo Łowcy', theme: 10, lock: true, start: { room: 0, r: 0, c: 1, dir: 1 },
     lore: 'Trofea na ścianach: „Łowca walczy dwoma ostrzami i nigdy nie odpuszcza ofiary.”',
     rooms: [
-      { map: ['#_O__ __T_',
+      { map: ['#_A__ __T_',
               '#H__J__B__',
               '#___ __S__'],
         foes: [{ k: 'rifle', sty: 'scout', r: 1, c: 8, dir: -1 }, { k: 'blaster', sty: 'scout', r: 2, c: 6, dir: -1 }] },
@@ -427,7 +427,7 @@ const LEVELS = [
   { name: 'Tron Arcylorda', theme: 11, lock: true, start: { room: 0, r: 0, c: 1, dir: 1 },
     lore: 'Ostatnia pieczęć: „Arcylord zna każdą sztukę aury. Jego dwa ostrza nie znają litości.”',
     rooms: [
-      { map: ['#_O__F____',
+      { map: ['#_A__F____',
               '#__T__ B__',
               '#H_F_V_F__'],
         foes: [{ k: 'rifle', sty: 'ash', r: 1, c: 8, dir: -1 }, { k: 'blaster', sty: 'ash', r: 2, c: 8, dir: -1 },

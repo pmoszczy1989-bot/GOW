@@ -87,6 +87,8 @@
   #acts .sheathe { right: 138px; bottom: 50px; width: 46px; height: 46px; }
   #acts .dash { right: 138px; bottom: 104px; width: 46px; height: 46px; border-color: rgba(150, 190, 255, .6); }
   #acts .dash svg { width: 26px; height: 26px; }
+  #acts .mega { right: 70px; bottom: 130px; width: 46px; height: 46px; border-color: rgba(150, 190, 255, .6); }
+  #acts .mega svg { width: 26px; height: 26px; }
   #acts .sheathe svg { width: 26px; height: 26px; }
   #acts small { position: absolute; left: 0; right: 0; bottom: -1px; font: bold 9px sans-serif; color: rgba(255,255,255,.75); }
   @media (max-height: 380px) {
@@ -113,7 +115,7 @@
       i platformami. Między planetami lecisz myśliwcem. Każdy rozdział kończy Lord z czerwonym ostrzem.
       Kryształy (10 = 1 punkt) rozwijają moce w drzewku umiejętności.</p>
     <p class="pc">
-      <kbd>←</kbd><kbd>→</kbd> bieg &nbsp; <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> ostrożny krok &nbsp; <kbd>D</kbd>+<kbd>←</kbd><kbd>→</kbd> bieg aury (szybciej i dalszy skok, zużywa aurę) &nbsp; <kbd>↑</kbd> skok / zasłona &nbsp; <kbd>↓</kbd> kucnięcie / zwis<br>
+      <kbd>←</kbd><kbd>→</kbd> bieg &nbsp; <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> ostrożny krok &nbsp; <kbd>D</kbd>+<kbd>←</kbd><kbd>→</kbd> bieg aury (szybciej i dalszy skok, zużywa aurę) &nbsp; <kbd>↑</kbd> skok / zasłona &nbsp; <kbd>C</kbd> mega skok (aura) &nbsp; <kbd>↓</kbd> kucnięcie / zwis<br>
       <kbd>A</kbd> wyciągnij ostrze i tnij (odbija strzały) / podnieś / użyj &nbsp; <kbd>S</kbd> schowaj ostrze<br>
       <kbd>Z</kbd> <kbd>X</kbd> moce aury w dwóch slotach (na start: przyciągnięcie + QTE <kbd>A</kbd> i odepchnięcie)<br>
       <kbd>U</kbd> drzewko umiejętności: pioruny, uścisk, tarcza, omamienie, leczenie, rzut ostrzem, kombinacje, zwinność<br>
@@ -132,6 +134,7 @@
   <span><kbd>←</kbd><kbd>→</kbd>ruch</span>
   <span><kbd>Shift</kbd>krok</span>
 <span><kbd>D</kbd>bieg aury</span>
+    <span><kbd>C</kbd>mega skok</span>
   <span><kbd>↑</kbd>skok</span>
   <span><kbd>↓</kbd>zwis</span>
   <span><kbd>A</kbd>ostrze / cios</span>
@@ -164,6 +167,9 @@
     <!-- Bieg aury (trzymaj) -->
     <button class="dash" data-k="dash" aria-label="Bieg aury"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
       <path d="M12 8 L22 16 L12 24"/><path d="M19 8 L29 16 L19 24"/><path d="M3 12 H9 M2 16 H10 M3 20 H9"/></svg></button>
+    <!-- Mega skok aury -->
+    <button class="mega" data-k="mega" aria-label="Mega skok"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
+      <path d="M6 26 Q16 -2 26 26"/><path d="M22 20 L26 26 L29 19"/><path d="M4 29 H12"/></svg></button>
     <!-- Schowaj ostrze -->
     <button class="sheathe" data-k="sheathe" aria-label="Schowaj ostrze"><svg viewBox="0 0 32 32">
       <rect x="13" y="6" width="6" height="16" rx="2" fill="#8a94a4"/><rect x="11" y="21" width="10" height="3" rx="1" fill="#c0c8d4"/>
@@ -171,9 +177,9 @@
   </div>
 </div>
 
-<script src="meta.js?v=18"></script>
-<script src="levels.js?v=18"></script>
-<script src="game.js?v=18"></script>
-<script src="ship.js?v=18"></script>
+<script src="meta.js?v=19"></script>
+<script src="levels.js?v=19"></script>
+<script src="game.js?v=19"></script>
+<script src="ship.js?v=19"></script>
 </body>
 </html>

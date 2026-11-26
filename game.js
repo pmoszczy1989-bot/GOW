@@ -189,10 +189,10 @@ const SND = {
 
 // ===== Wejście =====
 // Strzałki – ruch, A – wyciągnij ostrze / cios / podnieś / użyj, S – schowaj ostrze,
-// Shift – ostrożny krok, D – bieg aury (stały klawisz), R – powtórz poziom.
+// Shift – ostrożny krok, D – bieg aury, C – mega skok (aura), R – powtórz poziom.
 const K = {}, PR = {};
 const KEYMAP = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Shift: 'walk' };
-const LETTERS = { KeyA: 'act', KeyS: 'sheathe', KeyZ: 'pull', KeyX: 'push', KeyD: 'dash' };
+const LETTERS = { KeyA: 'act', KeyS: 'sheathe', KeyZ: 'pull', KeyX: 'push', KeyD: 'dash', KeyC: 'mega' };
 const keyOf = e => LETTERS[e.code] || LETTERS['Key' + String(e.key).toUpperCase()] || KEYMAP[e.key];
 function press(k) { if (!K[k]) PR[k] = true; K[k] = true; }
 function release(k) { K[k] = false; }
@@ -431,7 +431,7 @@ const lordName = f => f.name || 'Mroczny Lord';
 
 function mkFoe(f) {
   const d = diff();
-  const hp = f.k === 'lord' ? 10 : f.k === 'drone' ? 2 + (d > 0.5 ? 1 : 0) : f.k === 'jet' ? 3 + (d > 0.6 ? 1 : 0)
+  const hp = f.k === 'lord' ? 5 + lordLv() : f.k === 'drone' ? 2 + (d > 0.5 ? 1 : 0) : f.k === 'jet' ? 3 + (d > 0.6 ? 1 : 0)
     : f.k === 'sniper' ? 2 : Math.min(5, (f.k === 'rifle' || f.k === 'shield' ? 4 : 3) + (d >= 0.35 ? 1 : 0));
   const o = {
     k: f.k, x: f.c * TW + 16, y: floorY(f.r), r: f.r, dir: f.dir, hx: f.c * TW + 16,
@@ -701,6 +701,7 @@ function die(kind) {
 
 function hurtPlayer(n, pushDir, kind) {
   if (P.st === 'dead' || P.inv > 0) return;
+  if (P.xhp > 0) { const k = Math.min(n, P.xhp); P.xhp -= k; n -= k; burst(P.x, P.y - 22, 10, '#60f090', 60, 50, true); }   // najpierw tracisz serca z eliksiru
   if (P.sh > 0 && (kind === 'kolba' || kind === 'dron' || kind === 'strzal')) {
     P.sh = 0; P.inv = 0.4; SND.deflect(); burst(P.x, P.y - 18, 14, '#80c0ff', 90, 60, true);
     say('Tarcza aury pochłania cios.', 1); return;
@@ -738,19 +739,25 @@ function groundCheck(running) {
   return true;
 }
 
-// Skok: wyższy i dalszy niż dawniej; Zwinność wydłuża go o 8% na poziom
-function jump(vx) {
+// Skok: zwykły (krótszy) albo mega skok aury (C) – dalszy i wyższy. Zwinność wydłuża skok o 8% na poziom
+const MEGA_COST = 20;
+function jump(vx, mega) {
   let k = 1 + skl('agil') * 0.08;
   if (P.dash && vx === 130 && P.aura >= 10) { k *= 1.35; P.aura -= 10; burst(P.x, P.y - 4, 6, game.blade.col, 60, 30, true); }   // skok z biegu aury
   P.st = 'jump'; P.t = 0; P.air = true; P.coy = 0; P.jb = 0;
-  const v = vx === 90 ? 100 : vx === 130 ? 145 : vx;
-  P.vx = P.dir * v * k; P.lvx = P.vx; P.vy = -175 - skl('agil') * 4; P.fallY = floorY(P.r);
+  let v = vx === 90 ? 62 : vx === 130 ? 92 : vx * 0.7;
+  if (mega) {
+    v = vx === 90 ? 115 : vx === 130 ? 170 : vx;
+    burst(P.x, P.y - 2, 14, '#a8d8ff', 80, 30, true); SND.push();
+  }
+  P.mega = !!mega;
+  P.vx = P.dir * v * k; P.lvx = P.vx; P.vy = (mega ? -175 : -150) - skl('agil') * 4; P.fallY = floorY(P.r);
   P.dj = skl('agil') >= 3;
   SND.swing();
 }
 // Podwójny skok (Zwinność 3) – w powietrzu ↑
 function airJump() {
-  P.dj = false; P.vy = -165; P.st = 'jump'; P.t = 0;
+  P.dj = false; P.vy = -150; P.st = 'jump'; P.t = 0;
   P.fallY = Math.min(P.fallY, P.y);
   burst(P.x, P.y, 8, '#a8d8ff', 50, 10, true); SND.swing();
 }
@@ -847,7 +854,7 @@ function tryHangDown() {
 function tryPick() {
   const ch = cell(P.r, colOf(P.x));
   if (ch === 'W') { P.st = 'sword'; P.t = 0; P.got = false; return true; }
-  if (ch === 'H' || ch === 'M') { P.st = 'drink'; P.t = 0; P.got = false; P.big = ch === 'M'; return true; }
+  if (ch === 'H' || ch === 'M' || ch === 'A') { P.st = 'drink'; P.t = 0; P.got = false; P.big = ch === 'M'; P.pot = ch; return true; }
   return false;
 }
 
@@ -930,9 +937,17 @@ function crateAhead() {
   }
   return -1;
 }
+// Wypicie mikstury: H – +1 życie, M – +1 maks. życie na stałe, A – eliksir wigoru: dodatkowe serce do pierwszej rany
+const XHP_MAX = 3;
+function potion(ch) {
+  if (ch === 'M') { P.max++; P.hp = P.max; say('Wielka mikstura – więcej życia!', 2.5); }
+  else if (ch === 'A') { P.xhp = Math.min(XHP_MAX, (P.xhp || 0) + 1); say('Eliksir wigoru – dodatkowe serce (jednorazowe)!', 2.5); }
+  else { P.hp = Math.min(P.max, P.hp + 1); say('Mikstura przywraca siły.', 2); }
+  SND.drink();
+}
 function breakCrate(c) {
-  const r = P.r, x = c * TW + 16, fy = floorY(r), pot = P.hp < P.max;
-  MAP[r][c] = pot ? 'H' : 'O';
+  const r = P.r, x = c * TW + 16, fy = floorY(r), pot = P.hp < P.max, vig = !pot && Math.random() < 0.4;
+  MAP[r][c] = pot ? 'H' : vig ? 'A' : 'O';
   SND.crash(); shake(2); game.stop = 0.04;
   sparks(x, fy - 8, game.blade.col, 8);
   burst(x, fy - 6, 10, '#8a6a40', 90, 80);
@@ -940,7 +955,7 @@ function breakCrate(c) {
     debris(x + (Math.random() - 0.5) * 12, fy - 4 - Math.random() * 10, r, (Math.random() - 0.5) * 140 + P.dir * 40,
       -80 - Math.random() * 90, 3 + Math.random() * 4, i % 2 ? '#7a5430' : '#a07444', i < 2 ? 0.4 : 0);
   }
-  say(pot ? 'Skrzynia pęka – w środku mikstura!' : 'Skrzynia pęka – w środku kryształ!', 2);
+  say(pot ? 'Skrzynia pęka – w środku mikstura!' : vig ? 'Skrzynia pęka – w środku eliksir wigoru!' : 'Skrzynia pęka – w środku kryształ!', 2);
 }
 
 const atDoor = () => cell(P.r, colOf(P.x)) === 'D';
@@ -950,6 +965,12 @@ function foeAhead(dir) {
   return FOES.some(f => f.alive && !f.air && !isDrone(f) && f.r === P.r && Math.sign(f.x - P.x) === dir && Math.abs(f.x - P.x) < 16);
 }
 
+// Wróg w zasięgu za plecami (rg > 0) albo przed bohaterem (rg < 0) – także drony
+function foeBehind(rg) {
+  const s = rg > 0 ? -P.dir : P.dir, R2 = Math.abs(rg);
+  return FOES.some(f => f.alive && f.st !== 'fin' && Math.sign(f.x - P.x) === s && Math.abs(f.x - P.x) < R2 &&
+    (isDrone(f) ? Math.abs(f.y - (P.y - 20)) < 50 : f.r === P.r));
+}
 function toFight() {
   if (P.ign < 0.2) SND.ignite();
   P.st = 'fight'; P.t = 0;
@@ -1222,12 +1243,12 @@ function auraPull() {
     if (!sw) for (let i = 1; i <= Math.min(4, 1 + skl('pull')); i++) {
       const c = colOf(P.x) + d * i, ch = cell(P.r, c);
       if (isWall(P.r, c)) break;
-      if ((ch === 'O' || ch === 'H' || ch === 'C') && c >= 0 && c < COLS) {
+      if ((ch === 'O' || ch === 'H' || ch === 'A' || ch === 'C') && c >= 0 && c < COLS) {
         if (ch === 'C') { pickBladeCrystal(P.r, c); return; }
         MAP[P.r][c] = '_';
         for (let k = 0; k < 6; k++) burst(c * TW + 16 - d * k * 6 * i, P.y - 12, 1, '#c0e0ff', 30, 20, true);
         if (ch === 'O') { game.crys++; SND.gem(); say('Aura przyciąga kryształ (' + game.crys + ')', 1.2); }
-        else { P.hp = Math.min(P.max, P.hp + 1); SND.drink(); say('Aura przyciąga miksturę.', 1.5); }
+        else potion(ch);
         return;
       }
     }
@@ -1291,7 +1312,7 @@ const LNAME = { pull: 'PRZYCIĄGNIĘCIE', push: 'FALA', shield: 'TARCZA', trick:
 function startLock(f) {
   if (game.lock || game.lockCd > 0 || !P.sword || !f.alive || P.st === 'swim' || P.air || P.st === 'dead') return false;
   const pw = [0, 1].filter(i => game.slots[i] && skl(game.slots[i]) > 0).map(i => i ? 'push' : 'pull');
-  const n = 4 + Math.floor(skl('combo') / 2) + (f.fury ? 1 : 0);
+  const n = Math.min(4, 3 + (f.lv >= 2 || f.fury ? 1 : 0));   // maks. 4 klawisze
   const seq = [...pw];
   while (seq.length < n - 1) {
     const r = Math.random();
@@ -1299,16 +1320,16 @@ function startLock(f) {
   }
   for (let i = seq.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [seq[i], seq[j]] = [seq[j], seq[i]]; }
   seq.unshift('act');
-  const win = Math.max(0.5, 1.05 - 0.07 * f.lv - (f.fury ? 0.12 : 0) + 0.06 * skl('focus'));
+  const win = Math.max(1.0, 1.8 - 0.1 * f.lv - (f.fury ? 0.15 : 0) + 0.1 * skl('focus'));   // czas na każdy klawisz
   P.dir = Math.sign(f.x - P.x) || P.dir; f.dir = -P.dir;
   const tx = P.x + P.dir * 24;
   if (hasFloor(f.r, colOf(tx)) && !isWall(f.r, colOf(tx))) f.x = tx;
   P.st = 'lock'; P.t = 0; P.combo = 0; P.drawn = true; P.ign = 1;
   f.st = 'lock'; f.t = 0; f.lift = 0;
   game.qte = null; game.finName = '';
-  game.lock = { f, seq, i: 0, t: 0, tot: 0, win, used: [] };
+  game.lock = { f, seq, i: 0, t: 0, tot: 0, win, used: [], pre: 1.3 };   // pre – zapowiedź sekwencji
   SND.clash(); shake(3); flash = { col: '#ffffff', t: 0.1 };
-  say('ZWARCIE OSTRZY!', 1.2);
+  say('ZWARCIE OSTRZY! Przygotuj się...', 1.4);
   return true;
 }
 function endLock() {
@@ -1324,7 +1345,11 @@ function updLock(rdt) {
   const mx = (P.x + f.x) / 2, my = P.y - 35;
   if (Math.random() < rdt * 30) sparks(mx, my, Math.random() < 0.5 ? game.blade.col : RED.col, 2);
   if (Math.floor(L.tot * 5) !== Math.floor((L.tot - rdt) * 5)) crackle(0.1, 0.025);
-  if (L.tot < 0.2) return;                        // krótka chwila na zorientowanie się
+  if (L.pre > 0) {                                 // zapowiedź: sekwencja widoczna, klawisze jeszcze nie działają
+    const p0 = L.pre; L.pre -= rdt; L.t = 0;
+    if (Math.ceil(p0 * 2) !== Math.ceil(L.pre * 2)) tone(L.pre > 0 ? 660 : 990, 0.07, 'square', 0.04);
+    return;
+  }
   const got = ['act', 'up', 'pull', 'push', 'down', 'left', 'right'].find(k => PR[k]);
   if (got) {
     if (got !== L.seq[L.i]) { lockFail(L, 'Zły ruch!'); return; }
@@ -1364,7 +1389,7 @@ function lockFx(k, f) {
 }
 function lockWin(L) {
   const f = L.f, d = P.dir, u = [...new Set(L.used)];
-  const dmg = Math.min(4, 2 + u.length);
+  const dmg = 2 + (u.length >= 2 ? 1 : 0);   // bossowie mają 5–10 życia
   const name = u.length ? u.map(k => LNAME[k]).join(' + ') : 'SERIA CIĘĆ';
   endLock();
   achv('lock');
@@ -1389,7 +1414,8 @@ function lockFail(L, why) {
   SND.clash(); shake(3);
   sparks((P.x + f.x) / 2, P.y - 35, RED.col, 14);
   f.st = 'gstrike'; f.t = 0.05; f.hit = true;
-  P.inv = 0; hurtPlayer(1, -d, 'lord');
+  P.inv = 0; hurtPlayer(1, -d, 'lord'); P.inv = Math.max(P.inv, 1.6);   // tylko 1 życie – chwila ochrony po zwarciu
+  f.rest = 1;
   if (P.st !== 'dead') { moveX(P, -d * 10, P.r); groundCheck(false); }
   say(why + ' ' + lordName(f) + ' przełamuje zwarcie!', 1.8);
 }
@@ -1457,12 +1483,11 @@ function updSwim(p, dt) {
   // Przedmioty zbierane w locie
   for (let r = 0; r < ROWS; r++) {
     const ch = cell(r, c);
-    if ('OHMC'.indexOf(ch) < 0 || Math.abs(p.y - (floorY(r) - 10)) > 16 || Math.abs(c * TW + 16 - p.x) > 12) continue;
+    if ('OHMAC'.indexOf(ch) < 0 || Math.abs(p.y - (floorY(r) - 10)) > 16 || Math.abs(c * TW + 16 - p.x) > 12) continue;
     if (ch === 'C') { pickBladeCrystal(r, c); continue; }
     MAP[r][c] = '_';
     if (ch === 'O') { game.crys++; SND.gem(); say('Kryształ energii (' + game.crys + ')', 1.2); }
-    else if (ch === 'M') { p.max++; p.hp = p.max; SND.drink(); say('Wielka mikstura – więcej życia!', 2.5); }
-    else { p.hp = Math.min(p.max, p.hp + 1); SND.drink(); say('Mikstura przywraca siły.', 2); }
+    else potion(ch);
     sparks(c * TW + 16, p.y, '#80f0ff', 8);
   }
   // Cięcie pod wodą – drony i miny
@@ -1611,6 +1636,7 @@ function updPlayer(dt) {
   if (p.dash && !dash0) { noise(0.3, 0.05, 500, 2600, 'bandpass'); tone(160, 0.3, 'sawtooth', 0.02, 460); }
   if (PR.dash && p.aura <= 1) say('Za mało aury na bieg.', 1);
   p.sh = Math.max(0, (p.sh || 0) - dt);
+  p.face = Math.max(0, (p.face || 0) - dt);
   updThrow(dt);
   updO2(p, dt);
   // Woda: wejście z lotu albo zanurzenie przy chodzeniu
@@ -1676,6 +1702,15 @@ function updPlayer(dt) {
   if (!p.air && p.st !== 'dead' && HANGST.indexOf(p.st) < 0 && cell(p.r, colOf(p.x)) === 'C' &&
       Math.abs(colOf(p.x) * TW + 16 - p.x) < 12) pickBladeCrystal(p.r, colOf(p.x));
 
+  // C – mega skok aury (z miejsca, z biegu, z pozycji walki)
+  if (PR.mega && !p.air && ['stand', 'run', 'step', 'turn', 'land', 'fight', 'fstep', 'crouch', 'block'].includes(p.st)) {
+    if (p.aura < MEGA_COST) { say('Za mało aury na mega skok.', 1); SND.click(); }
+    else {
+      const w = K.right ? 1 : K.left ? -1 : 0;
+      if (w) p.dir = w;
+      p.aura -= MEGA_COST; jump(!w ? 0 : p.st === 'run' || p.dash ? 130 : 90, true);
+    }
+  }
   switch (p.st) {
     case 'stand': {
       if (p.sword && (engaged() || (p.drawn && !p.thr))) { toFight(); break; }
@@ -1783,10 +1818,8 @@ function updPlayer(dt) {
     case 'drink': {
       if (!p.got && p.t >= 0.4) {
         p.got = true; MAP[p.r][colOf(p.x)] = '_';
-        if (p.big) { p.max++; p.hp = p.max; say('Wielka mikstura – więcej życia!', 2.5); }
-        else { p.hp = Math.min(p.max, p.hp + 1); say('Mikstura przywraca siły.', 2); }
-        SND.drink();
-        flash = { col: p.big ? '#ffd040' : '#ff4060', t: 0.2 };
+        potion(p.pot || (p.big ? 'M' : 'H'));
+        flash = { col: p.big ? '#ffd040' : p.pot === 'A' ? '#60f090' : '#ff4060', t: 0.2 };
       }
       if (p.t >= 1.3) { p.st = 'stand'; p.t = 0; }
       break;
@@ -1795,7 +1828,11 @@ function updPlayer(dt) {
       const t = engaged();
       if (PR.sheathe) { p.drawn = false; p.st = 'stand'; p.t = 0; SND.retract(); break; }   // S – schowanie ostrza
       if (!t && !p.drawn) { p.st = 'stand'; break; }
-      if (t) p.dir = Math.sign(t.x - p.x) || p.dir;
+      // Świeże wciśnięcie kierunku „do tyłu” obraca bohatera, gdy za nim jest wróg (np. dron Lorda) albo cel jest daleko
+      const bk = p.dir > 0 ? 'left' : 'right';
+      if (t && PR[bk] && (foeBehind(70) || Math.abs(t.x - p.x) > 46)) { p.dir = -p.dir; p.face = 0.9; SND.swing(); break; }
+      if (p.face > 0 && foeBehind(-70)) p.face = 0.9;          // przodem do pomocnika – nie odwracaj się samoczynnie
+      if (t && !(p.face > 0)) p.dir = Math.sign(t.x - p.x) || p.dir;
       if (!t && PR.act && (tryPick() || tryUse())) break;
       if (!t && PR.up && atDoor()) {
         if (doorOpen()) { p.drawn = false; p.st = 'exit'; p.t = 0; SND.win(); }
@@ -1870,7 +1907,7 @@ function updPlayer(dt) {
       // Sterowanie w locie: lekka korekta wokół prędkości wybicia
       const want = K.right ? 1 : K.left ? -1 : 0;
       if (want) {
-        const lo = p.lvx - 45, hi = p.lvx + 45;
+        const ac = p.mega ? 40 : 25, lo = p.lvx - ac, hi = p.lvx + ac;   // korekta w locie (mniejsza przy zwykłym skoku)
         p.vx = Math.max(lo, Math.min(hi, p.vx + want * 260 * dt));
         if (Math.sign(want) !== p.dir && p.lvx === 0) p.dir = want;
       }
@@ -2254,7 +2291,8 @@ function updRubble(f, dt) {
 function updLord(f, dt) {
   const dx = P.x - f.x, d = Math.abs(dx);
   const same = playerOnRow(f.r);
-  if (!f.fury && f.hp <= 5 && f.st !== 'meditate' && f.st !== 'rise') {
+  // Fazy walki: 1. Lord bez przeszkadzajek; od 2. rzut ostrzem, od 3. furia z dronami, od 4. walący się strop
+  if (!f.fury && f.lv >= 2 && f.hp <= f.max * 0.5 && f.st !== 'meditate' && f.st !== 'rise') {
     f.fury = true; say(lordName(f) + ' wpada w furię i wzywa drony!', 2.5); SND.lord(); shake(3);
     sparks(f.x, f.y - 26, RED.col, 20);
     // Faza 2: Lord wzywa dwa drony
@@ -2265,8 +2303,8 @@ function updLord(f, dt) {
     }
   }
   // Faza 1 (≤ 7): rzut ostrzem; faza 3 (≤ 3): strop zaczyna się walić
-  if (!f.p1 && f.hp <= 7) { f.p1 = true; say(lordName(f) + ' sięga po rzut ostrzem – kucnij albo odbij je zasłoną!', 2.5); }
-  if (!f.p3 && f.hp <= 3 && f.st !== 'lock') {
+  if (!f.p1 && f.lv >= 1 && f.hp <= f.max * 0.7) { f.p1 = true; say(lordName(f) + ' sięga po rzut ostrzem – kucnij albo odbij je zasłoną!', 2.5); }
+  if (!f.p3 && f.lv >= 3 && f.hp <= f.max * 0.3 && f.st !== 'lock') {
     f.p3 = true; f.rub = []; f.rubT = 1.2; shake(4); SND.crash();
     say('Strop sali zaczyna się walić! Uważaj na cienie pod gruzem.', 2.5);
   }
@@ -2334,7 +2372,7 @@ function updLord(f, dt) {
           hurtPlayer(1, f.dir, 'lord');
         }
       }
-      if (f.t > 0.3) { f.st = 'guard'; f.t = 0; f.cd = 0.45 + Math.random() * 0.6; }
+      if (f.t > 0.3) { f.st = 'guard'; f.t = 0; f.cd = f.rest ? 1.8 : 0.45 + Math.random() * 0.6; f.rest = 0; }   // po zwarciu dłuższa przerwa
       break;
     case 'gblock': if (f.t > 0.3) { f.st = 'guard'; f.cd = Math.min(f.cd, 0.25); } break;
     case 'ghurt': if (f.t > 0.3) { f.st = 'guard'; f.cd = 0.35; } break;
@@ -3653,16 +3691,16 @@ function drawDynamic() {
       ctx.fillStyle = '#2a2e38'; ctx.fillRect(sx + 3, y, 1, 2); ctx.fillRect(sx + 6, y, 1, 2);
       ctx.fillStyle = '#5a6070'; ctx.fillRect(sx + 10, y - 1, 2, 4);
       EQ.push({ x: sx + 12, y: y + 1, col: '#ffffff', r: 8 + Math.sin(game.anim * 4) * 2, a: 0.5, rgb: '200,220,255' });
-    } else if (ch === 'H' || ch === 'M') {
-      const big = ch === 'M', px = x + 14, y = fy, col = big ? '#e0a020' : '#c01830';
+    } else if (ch === 'H' || ch === 'M' || ch === 'A') {
+      const big = ch === 'M', vig = ch === 'A', px = x + 14, y = fy, col = big ? '#e0a020' : vig ? '#20b060' : '#c01830';
       ctx.fillStyle = '#d0d8e8'; ctx.fillRect(px + 1, y - (big ? 11 : 9), 2, 3);
       ctx.fillStyle = col; ctx.fillRect(px - (big ? 1 : 0), y - (big ? 8 : 6), big ? 6 : 4, big ? 7 : 5);
-      ctx.fillStyle = big ? '#ffe080' : '#ff6078'; ctx.fillRect(px - (big ? 1 : 0), y - (big ? 8 : 6), 1, 2);
+      ctx.fillStyle = big ? '#ffe080' : vig ? '#a0ffc0' : '#ff6078'; ctx.fillRect(px - (big ? 1 : 0), y - (big ? 8 : 6), 1, 2);
       ctx.fillStyle = '#8a5030'; ctx.fillRect(px + 1, y - (big ? 12 : 10), 2, 1);
       const b = (game.anim * 1.5) % 1;
-      ctx.fillStyle = big ? `rgba(255,220,120,${1 - b})` : `rgba(255,140,160,${1 - b})`;
+      ctx.fillStyle = big ? `rgba(255,220,120,${1 - b})` : vig ? `rgba(140,255,180,${1 - b})` : `rgba(255,140,160,${1 - b})`;
       ctx.fillRect(px + 2, Math.round(y - 13 - b * 8), 1, 1);
-      EQ.push({ x: px + 2, y: y - 4, col, r: 10, a: 0.25, rgb: big ? '255,200,60' : '255,60,90' });
+      EQ.push({ x: px + 2, y: y - 4, col, r: 10, a: 0.25, rgb: big ? '255,200,60' : vig ? '60,240,120' : '255,60,90' });
     } else if (ch === 'D' && !doorOpen()) {
       // Pole siłowe Lorda zamyka wrota
       for (let yy = fy - 30; yy < fy; yy += 2) {
@@ -4010,6 +4048,17 @@ function tri(x, y, full, col, dark) {
   else { ctx.strokeStyle = dark; ctx.lineWidth = 0.8; ctx.lineJoin = 'round'; ctx.stroke(); }
 }
 
+// Przepaść przed bohaterem szersza niż 2 kafle – zwykły skok nie wystarczy
+function wideGap() {
+  const c0 = colOf(P.x);
+  for (let i = 1; i <= 2; i++) {
+    if (cell(P.r, c0 + P.dir * i) !== ' ') continue;
+    let w = 0;
+    while (cell(P.r, c0 + P.dir * (i + w)) === ' ' && w < 9) w++;
+    return w >= 3 && w <= 5 && c0 + P.dir * (i + w) >= 0 && c0 + P.dir * (i + w) < COLS;
+  }
+  return false;
+}
 function hint() {
   const p = P, ch = cell(p.r, colOf(p.x));
   if (p.st === 'dead') return 'R lub A – spróbuj ponownie';
@@ -4029,6 +4078,7 @@ function hint() {
   }
   if (ch === 'W') return 'A – podnieś rękojeść';
   if (ch === 'H' || ch === 'M') return 'A – wypij miksturę';
+  if (ch === 'A') return 'A – wypij eliksir wigoru (+1 serce jednorazowo)';
   if (ch === 'T') return 'A – odczytaj terminal';
   if (ch === 'K') return used ? '' : 'A – użyj konsoli';
   if (ch === 'Y') return 'A – przestaw dźwignię (albo przyciągnij ją aurą z daleka)';
@@ -4042,6 +4092,7 @@ function hint() {
     return 'Podkradnij się – A cichy cios od tyłu (nie biegnij!)';
   if (atDoor()) return doorOpen() ? '↑ – wyjdź przez wrota' : 'Pokonaj Lorda, by zgasić pole siłowe';
   if (crateAhead() >= 0) return p.sword ? 'A – rozbij skrzynię' : 'Skrzynię rozetnie tylko ostrze';
+  if (!p.air && wideGap()) return 'Szeroka przepaść – C mega skok (aura ' + MEGA_COST + ')' + (p.aura < MEGA_COST ? ' – za mało aury!' : '');
   if (!p.sword) return '←→ bieg · ↑ skok · ↓ zwis · Z/X aura (moc działa i bez ostrza)';
   if (gate >= 0.8 && gateT <= 0 && !used) return 'Krata się zamyka – biegnij!';
   if (shooter) { const i = game.slots.indexOf('push'); return 'Strzelec! A – cięcie odbija strzały' + (i >= 0 ? ' · ' + 'ZX'[i] + ' fala aury' : ''); }
@@ -4073,6 +4124,7 @@ function drawText() {
 function drawHUD() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 180, SW, 20);
   for (let i = 0; i < P.max; i++) tri(4 + i * 9, 186, i < P.hp, '#e82020', '#701010');
+  for (let i = 0; i < (P.xhp || 0); i++) tri(4 + (P.max + i) * 9, 186, true, '#40e080', '#105030');   // serca z eliksiru
   // Pasek aury (i tlenu pod wodą)
   {
     rrect(4, 193.5, 40, 2.4, 1, '#1a2030');
@@ -4106,9 +4158,9 @@ function drawHUD() {
   const L = game.lock;
   if (L) {
     const n = L.seq.length, w = 18, x0 = SW / 2 - n * w / 2, y = 30;
-    txt('ZWARCIE OSTRZY', SW / 2, y - 6, '#ffe0a0', 'center', 9);
+    txt(L.pre > 0 ? 'PRZYGOTUJ SIĘ… ' + Math.ceil(L.pre) : 'ZWARCIE OSTRZY', SW / 2, y - 6, L.pre > 0 ? '#80e0ff' : '#ffe0a0', 'center', 9);
     L.seq.forEach((k, i) => {
-      const x = x0 + i * w + 2, cur = i === L.i, done = i < L.i;
+      const x = x0 + i * w + 2, cur = i === L.i && !(L.pre > 0), done = i < L.i;
       rrect(x, y, w - 4, 14, 2, done ? '#1e5a34' : cur ? '#34487e' : '#181a28');
       const pw = k === 'pull' || k === 'push' ? game.slots[k === 'pull' ? 0 : 1] : null;
       const pulse = cur ? 1 + Math.sin(game.anim * 18) * 0.1 : 1;
