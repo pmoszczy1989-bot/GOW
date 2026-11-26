@@ -75,22 +75,27 @@
   #acts { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom));
     width: 196px; height: 172px; pointer-events: none; }
   #acts button { position: absolute; width: 58px; height: 58px; border-radius: 50%; padding: 0; pointer-events: auto; touch-action: none;
-    border: 2px solid rgba(255, 255, 255, .38); background: rgba(20, 22, 34, .45); color: #fff; }
-  #acts button svg { width: 32px; height: 32px; display: block; margin: auto; }
+    border: 2px solid rgba(255, 255, 255, .38); background: rgba(20, 22, 34, .45); color: #fff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+  #acts button svg { width: 26px; height: 26px; display: block; margin: 0; flex: none; }
   #acts button.on { background: rgba(240, 192, 64, .5); border-color: #f0c040; }
   #acts .big { width: 72px; height: 72px; }
-  #acts .big svg { width: 42px; height: 42px; }
+  #acts .big svg { width: 34px; height: 34px; }
   #acts .act { right: 0; bottom: 0; border-color: rgba(120, 220, 255, .7); }
   #acts .up { right: 82px; bottom: 0; }
   #acts .pull { right: 0; bottom: 82px; border-color: rgba(150, 190, 255, .6); }
   #acts .push { right: 66px; bottom: 68px; border-color: rgba(150, 190, 255, .6); }
   #acts .sheathe { right: 138px; bottom: 50px; width: 46px; height: 46px; }
   #acts .dash { right: 138px; bottom: 104px; width: 46px; height: 46px; border-color: rgba(150, 190, 255, .6); }
-  #acts .dash svg { width: 26px; height: 26px; }
+  #acts .dash svg { width: 19px; height: 19px; }
   #acts .mega { right: 70px; bottom: 130px; width: 46px; height: 46px; border-color: rgba(150, 190, 255, .6); }
-  #acts .mega svg { width: 26px; height: 26px; }
-  #acts .sheathe svg { width: 26px; height: 26px; }
-  #acts small { position: absolute; left: 0; right: 0; bottom: -1px; font: bold 9px sans-serif; color: rgba(255,255,255,.75); }
+  #acts .mega svg { width: 19px; height: 19px; }
+  #acts .sheathe svg { width: 19px; height: 19px; }
+  #acts small { display: block; max-width: 84%; font: bold 7.5px/1.25 sans-serif; color: rgba(255,255,255,.8); text-align: center;
+    white-space: nowrap; letter-spacing: -.2px; pointer-events: none; }
+  #acts small b { display: block; color: #ffe080; font-size: 8px; line-height: 1.05; }
+  #acts .dash small, #acts .mega small, #acts .sheathe small { font-size: 6.5px; }
+  #acts .dash small b, #acts .mega small b, #acts .sheathe small b { font-size: 7px; }
   @media (max-height: 380px) {
     #stick { width: 112px; height: 112px; }
     #knob { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
@@ -154,32 +159,32 @@
       <line x1="9" y1="23" x2="26" y2="6" stroke="#7fe0ff" stroke-width="4" stroke-linecap="round"/>
       <line x1="9" y1="23" x2="26" y2="6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       <line x1="4" y1="28" x2="10" y2="22" stroke="#c0c8d4" stroke-width="3.4" stroke-linecap="round"/>
-      <line x1="7" y1="19" x2="13" y2="25" stroke="#8a94a4" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <line x1="7" y1="19" x2="13" y2="25" stroke="#8a94a4" stroke-width="2" stroke-linecap="round"/></svg><small>CIOS<b>(A)</b></small></button>
     <!-- Skok -->
     <button class="up" data-k="up" aria-label="Skok"><svg viewBox="0 0 32 32">
-      <path d="M16 5 L26 17 H20 V27 H12 V17 H6 Z" fill="#f0e0b8"/></svg></button>
+      <path d="M16 5 L26 17 H20 V27 H12 V17 H6 Z" fill="#f0e0b8"/></svg><small>SKOK<b>(↑)</b></small></button>
     <!-- Przyciągnięcie aurą -->
     <button class="pull" data-k="pull" aria-label="Przyciągnij"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
-      <path d="M27 6 Q19 16 27 26"/><path d="M21 9 Q15 16 21 23"/><path d="M15 16 H4"/><path d="M8 12 L4 16 L8 20"/></svg><small>PRZYC</small></button>
+      <path d="M27 6 Q19 16 27 26"/><path d="M21 9 Q15 16 21 23"/><path d="M15 16 H4"/><path d="M8 12 L4 16 L8 20"/></svg><small>PRZYC<b>(Z)</b></small></button>
     <!-- Fala odpychająca -->
     <button class="push" data-k="push" aria-label="Odepchnij"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
-      <path d="M17 6 Q25 16 17 26"/><path d="M23 9 Q29 16 23 23"/><path d="M4 16 H14"/><path d="M10 12 L14 16 L10 20"/></svg><small>ODEP</small></button>
+      <path d="M17 6 Q25 16 17 26"/><path d="M23 9 Q29 16 23 23"/><path d="M4 16 H14"/><path d="M10 12 L14 16 L10 20"/></svg><small>ODEP<b>(X)</b></small></button>
     <!-- Bieg aury (trzymaj) -->
     <button class="dash" data-k="dash" aria-label="Bieg aury"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
-      <path d="M12 8 L22 16 L12 24"/><path d="M19 8 L29 16 L19 24"/><path d="M3 12 H9 M2 16 H10 M3 20 H9"/></svg></button>
+      <path d="M12 8 L22 16 L12 24"/><path d="M19 8 L29 16 L19 24"/><path d="M3 12 H9 M2 16 H10 M3 20 H9"/></svg><small>BIEG<b>(D)</b></small></button>
     <!-- Mega skok aury -->
     <button class="mega" data-k="mega" aria-label="Mega skok"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
-      <path d="M6 26 Q16 -2 26 26"/><path d="M22 20 L26 26 L29 19"/><path d="M4 29 H12"/></svg></button>
+      <path d="M6 26 Q16 -2 26 26"/><path d="M22 20 L26 26 L29 19"/><path d="M4 29 H12"/></svg><small>MEGA<b>(C)</b></small></button>
     <!-- Schowaj ostrze -->
     <button class="sheathe" data-k="sheathe" aria-label="Schowaj ostrze"><svg viewBox="0 0 32 32">
       <rect x="13" y="6" width="6" height="16" rx="2" fill="#8a94a4"/><rect x="11" y="21" width="10" height="3" rx="1" fill="#c0c8d4"/>
-      <path d="M16 25 V30 M12 27 L16 30 L20 27" stroke="#f0e0b8" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
+      <path d="M16 25 V30 M12 27 L16 30 L20 27" stroke="#f0e0b8" stroke-width="2" fill="none" stroke-linecap="round"/></svg><small>SCHOWAJ<b>(S)</b></small></button>
   </div>
 </div>
 
-<script src="meta.js?v=21"></script>
-<script src="levels.js?v=21"></script>
-<script src="game.js?v=21"></script>
-<script src="ship.js?v=21"></script>
+<script src="meta.js?v=22"></script>
+<script src="levels.js?v=22"></script>
+<script src="game.js?v=22"></script>
+<script src="ship.js?v=22"></script>
 </body>
 </html>

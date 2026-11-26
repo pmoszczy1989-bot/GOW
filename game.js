@@ -415,7 +415,7 @@ function updLabels() {
     const bt = document.querySelector('#acts button[data-k="' + k + '"]');
     if (!bt || !game.slots) return;
     const id = game.slots[i], el = bt.querySelector('small'), sv = bt.querySelector('svg');
-    if (el) el.textContent = ab[id] || '';
+    if (el) el.innerHTML = (ab[id] || '') + '<b>(' + (i ? 'X' : 'Z') + ')</b>';
     if (sv && PICON[id]) { sv.innerHTML = PICON[id]; bt.setAttribute('aria-label', PNAME[id] || id); }
   });
 }

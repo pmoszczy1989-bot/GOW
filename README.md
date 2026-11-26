@@ -16,7 +16,7 @@ widać pasek z podpowiedziami klawiszy.
 Gra skaluje się do ekranu (w pionie jest u góry, sterowanie pod nią). W lewym dolnym rogu jest gałka
 (mocne wychylenie w bok – bieg, lekkie – ostrożny krok, w górę – skok, w dół – zwis/kucnięcie),
 w prawym przyciski z ikonami: ostrze/cios, skok, przyciągnięcie, odepchnięcie, bieg aury, mega skok, schowanie ostrza.
-Przyciski Z/X zmieniają ikonę i podpis zależnie od mocy przypisanej do slotu.
+Przyciski Z/X zmieniają ikonę i podpis zależnie od mocy przypisanej do slotu. Każdy przycisk ma pod ikoną nazwę i odpowiednik klawisza w nawiasie, np. `CIOS (A)`, `SKOK (↑)`, `TARCZA (Z)` – ułatwia to zwarcie ostrzy, gdzie sekwencja pokazuje klawisze.
 
 ## Sterowanie
 
