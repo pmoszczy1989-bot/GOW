@@ -4,29 +4,33 @@
 // tylko definiuje funkcje wywoływane później przez game.js.
 //
 // localStorage:
-//   gow_save – bieżący bieg (stan na początku poziomu): lvl, crys, spent, sk, slots, maxHp, time, blade, dark
+//   gow_save – bieżący bieg (stan na początku poziomu): lvl, crys, spent, sk, slots, maxHp, time, blade, dark,
+//     got (kryształy mapy zebrane na tym poziomie), ngp (cykl Nowej gry+), ship (ulepszenia myśliwca)
 //   gow_voice – false = głosy lektora wyłączone
-//   gow_meta – trwałe postępy: best (najdalszy poziom), achv {id: data}, blades [id], lords [imiona]
+//   gow_meta – trwałe postępy: best (najdalszy poziom), achv {id: data}, blades [id], lords [imiona],
+//     lv {poziom: {s: gwiazdki, t: rekord czasu}}, codex [klucze], outfit, wins, ngc (przeniesienie do NG+), rush {n, t}
 
 const SAVE_KEY = 'gow_save', META_KEY = 'gow_meta';
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
 function lsSet(k, v) {
   try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
 }
-const META = Object.assign({ best: 0, achv: {}, blades: [], lords: [] }, lsGet(META_KEY) || {});
+const META = Object.assign({ best: 0, achv: {}, blades: [], lords: [], lv: {}, codex: [], outfit: 'std', wins: 0, ngc: null, rush: null },
+  lsGet(META_KEY) || {});
 const saveMeta = () => lsSet(META_KEY, META);
 
 // ===== Zapis biegu =====
 function saveRun() {
-  if (!game.live) return;
+  if (!game.live || game.rush) return;
   META.best = Math.max(META.best || 0, lvl); saveMeta();
-  lsSet(SAVE_KEY, { v: 1, lvl, crys: game.crys, spent: game.spent, sk: game.sk, slots: game.slots, maxHp: game.maxHp,
-    time: game.time, blade: game.blade.id, dark: game.dark || 0 });
+  lsSet(SAVE_KEY, { v: 1, lvl, crys: game.crysLvl, spent: game.spent, sk: game.sk, slots: game.slots, maxHp: game.maxHp,
+    time: game.time, blade: game.blade.id, dark: game.dark || 0, got: game.got, ngp: game.ngp || 0, ship: game.shipUp || null });
 }
 function runSave() { const s = lsGet(SAVE_KEY); return s && s.v === 1 && LEVELS[s.lvl] ? s : null; }
 function applyRun(s) {
   game.crys = s.crys; game.spent = s.spent; game.sk = Object.assign({}, s.sk); game.slots = s.slots.slice();
   game.maxHp = s.maxHp; game.time = s.time; game.dark = s.dark || 0; game.blade = bladeById(s.blade); game.path = '';
+  game.ngp = s.ngp || 0; game.shipUp = Object.assign(shipUp0(), s.ship || {});
 }
 
 // ===== Rozdziały =====
@@ -482,21 +486,27 @@ function buildMenu() {
   let h = '';
   if (s) h += `<button data-m="cont" class="main">▶ Kontynuuj – poziom ${s.lvl + 1}: ${LEVELS[s.lvl].name} <kbd>Enter</kbd></button>`;
   h += `<button data-m="new"${s ? '' : ' class="main"'}>Nowa gra <kbd>${s ? 'N' : 'Enter'}</kbd></button>`;
+  if (META.ngc) h += `<button data-m="ngp" title="Zachowujesz umiejętności, kryształy, ostrze i ulepszenia myśliwca; wrogowie są silniejsi">Nowa gra+ (cykl ${META.ngc.ngp}) <kbd>P</kbd></button>`;
+  if (rushList().length && META.lords.length) h += `<button data-m="rush" title="Walki z pokonanymi Lordami jedna po drugiej">⚔ Starcia z Lordami (${rushList().length}) <kbd>B</kbd></button>`;
   const ch = chapStarts().filter(i => i <= best);
   if (ch.length > 1) {
     h += '<div class="chap">Rozdział: ' + ch.map((i, k) =>
       `<button data-m="ch" data-i="${i}" title="${LEVELS[i].chapter}">${ROMAN[k]}</button>`).join('') + ' <small>(klawisze 1–' + ch.length + ')</small></div>';
   }
-  h += `<div class="stat">★ Osiągnięcia ${n}/${ACHV.length} · ◆ Kryształy ostrzy ${XBLADES.filter(b => hasBlade(b.id)).length}/${XBLADES.length}</div>`;
+  h += `<div class="stat">★ Osiągnięcia ${n}/${ACHV.length} · ◆ Kryształy ostrzy ${XBLADES.filter(b => hasBlade(b.id)).length}/${XBLADES.length}` +
+    ` · ☆ Gwiazdki ${starSum()}/${LEVELS.length * 3}${META.rush ? ' · ⚔ ' + META.rush.n + ' Lordów: ' + fmtT(META.rush.t) : ''}</div>`;
   el.innerHTML = h;
   el.querySelectorAll('button').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     const m = b.dataset.m;
-    if (m === 'cont') contGame(); else if (m === 'new') beginGame(); else chapGame(+b.dataset.i);
+    if (m === 'cont') contGame(); else if (m === 'new') beginGame(); else if (m === 'ngp') ngGame(); else if (m === 'rush') rushGame();
+    else chapGame(+b.dataset.i);
   }));
 }
 function titleKey(e) {
   if (e.key === 'n' || e.key === 'N') { beginGame(); return; }
+  if ((e.key === 'p' || e.key === 'P') && META.ngc) { ngGame(); return; }
+  if ((e.key === 'b' || e.key === 'B') && rushList().length && META.lords.length) { rushGame(); return; }
   const d = parseInt(e.key, 10);
   if (d >= 1 && d <= 9) {
     const ch = chapStarts().filter(i => i <= (META.best || 0));
@@ -504,20 +514,259 @@ function titleKey(e) {
   }
   start();
 }
-function leaveTitle() { audioOn(); titleEl.classList.add('hide'); game.live = true; }
+function leaveTitle() { audioOn(); titleEl.classList.add('hide'); game.live = true; game.rush = null; }
 function beginGame() { leaveTitle(); newGame(); }
 function contGame() {
   const s = runSave();
   if (!s) { beginGame(); return; }
-  leaveTitle(); applyRun(s); loadLevel(s.lvl);
+  leaveTitle(); applyRun(s);
+  // Kryształy zebrane przed zapisem na tym poziomie nie pojawią się ponownie
+  game.got = (s.got || []).slice(); game.crysLvl = s.crys; game.crys = s.crys + game.got.length; game.retry = true;
+  loadLevel(s.lvl);
   say('Wczytano zapis – poziom ' + (s.lvl + 1) + ': ' + LV.name, 2.5);
 }
 function chapGame(i) {
   leaveTitle();
   const s = runSave();
   if (s) applyRun(s);
-  else { game.maxHp = 3; game.time = 0; skReset(); game.crys = chapOf(i) * 25; game.dark = 0; game.path = ''; game.blade = BLADES[0]; }
+  else { game.maxHp = 3; game.time = 0; skReset(); game.crys = chapOf(i) * 25; game.dark = 0; game.path = ''; game.blade = BLADES[0]; game.ngp = 0; game.shipUp = shipUp0(); }
   if (!P || !game.blade) game.blade = BLADES[0];
   loadLevel(i);
   showStory(chapOf(i), () => { game.mode = 'play'; }, LEVELS[i].chapter);
+}
+
+
+// ===== Gwiazdki i rekordy poziomów =====
+// ★ ukończenie · ★ bez rany (przelot: najwyżej 2 trafienia) · ★ czas w normie (przelot: bez trafienia)
+const shipUp0 = () => ({ gun: 0, shield: 0, torp: 0 });
+const fmtT = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
+const parT = i => 30 + (LEVELS[i].rooms || [0]).length * 35;
+const starSum = () => Object.values(META.lv).reduce((a, o) => a + (o.s || 0), 0);
+function levelStars() {
+  const t = game.lvlT || 0, sh = !!LV.ship, h = game.hurtLvl;
+  const a = sh ? h <= 2 : !h, b = sh ? !h : t <= parT(lvl), s = 1 + (a ? 1 : 0) + (b ? 1 : 0);
+  const o = META.lv[lvl] || { s: 0, t: 0 }, rec = !!o.t && t < o.t;
+  META.lv[lvl] = { s: Math.max(o.s || 0, s), t: !o.t || t < o.t ? Math.round(t * 10) / 10 : o.t }; saveMeta();
+  const d = sh ? (a ? '★ ' : '☆ ') + 'max 2 trafienia   ' + (b ? '★ ' : '☆ ') + 'bez trafienia'
+    : (a ? '★ ' : '☆ ') + 'bez rany   ' + (b ? '★ ' : '☆ ') + 'czas ≤ ' + fmtT(parT(lvl));
+  toast('★'.repeat(s) + '☆'.repeat(3 - s), LV.name + ' – ' + fmtT(t) + (rec ? '  NOWY REKORD!' : ''), d);
+}
+
+// ===== Encyklopedia (E): wrogowie, planety, stroje, rekordy =====
+const CODEX = [
+  ['blaster', 'Strażnik z blasterem', 'Podstawowy żołnierz Lordów. Strzela z bliska – odbij strzał ostrzem (A), a wróci do strzelca.'],
+  ['rifle', 'Szturmowiec z karabinem', 'Więcej pancerza i dłuższe serie. Podejdź zasłonięty i tnij, zanim przeładuje.'],
+  ['shield', 'Tarczownik', 'Ciężka tarcza zatrzymuje cięcia z przodu. Odepchnij go aurą albo zajdź od tyłu.'],
+  ['sniper', 'Snajper', 'Celuje długo z drugiego końca komnaty, ale trafia mocno. Skracaj dystans albo się kryj.'],
+  ['drone', 'Dron bojowy', 'Mała sonda strzelająca z powietrza. Przyciągnij ją albo strąć piorunami aury.'],
+  ['jet', 'Łowca z plecakiem', 'Najemnik z plecakiem odrzutowym. Krąży nad komnatą – ściągnij go aurą na ziemię.'],
+  ['raider', 'Najemnicy z Sarrak', 'Pustynni rabusie w goglach i chustach, wynajęci przez Panią Burz.'],
+  ['aqua', 'Żołnierze głębin', 'Kombinezony z kopułą hełmu – strzegą zatopionych stacji Thalos.'],
+  ['snow', 'Szturmowcy mrozu', 'Białe płyty i futrzane kołnierze. Walczą na śliskim lodzie Krio.'],
+  ['scout', 'Zwiadowcy Verdanu', 'Myśliwi w maskujących pelerynach – czają się między pniami leśnego księżyca.'],
+  ['ash', 'Gwardia popiołu', 'Elita Ignis w czarnych płytach z żarzącym się wizjerem. Najtwardsi z żołnierzy.'],
+  ['Mroczny Lord', 'Mroczny Lord', 'Pan Cytadeli i najmłodszy z uczniów Arcylorda. „Twoje światło zgaśnie w tych lochach.”'],
+  ['Pani Burz', 'Pani Burz', 'Władczyni wydm Sarrak, walczy ostrzem dwustronnym. „Piasek pogrzebie twoje światło.”'],
+  ['Lord Głębin', 'Lord Głębin', 'Strażnik zatopionych ruin Thalos, walczy dwoma ostrzami. „Ocean nie oddaje tego, co pochłonie.”'],
+  ['Królowa Mrozu', 'Królowa Mrozu', 'Pani lodowego Krio z ostrzem dwustronnym. „Twoje serce zamarznie szybciej niż ostrze.”'],
+  ['Łowca Verdanu', 'Łowca Verdanu', 'Myśliwy w skórach i rogach, walczy dwoma ostrzami. „W tym lesie to ja poluję.”'],
+  ['Arcylord', 'Arcylord', 'Mistrz wszystkich Lordów, władca wulkanicznego Ignis. „Wszyscy moi uczniowie upadli. Ja nie upadnę.”'],
+];
+const PLANETS = [
+  ['#8a7a9a', 'Mroczna twierdza na skalnej grani. Lochy pełne pułapek, kolców i strażników – tu zaczyna się droga rycerza.'],
+  ['#e0b060', 'Pustynna planeta wydm i ruin. Ruchome piaski, burze i najemnicy w służbie Pani Burz.'],
+  ['#3090b0', 'Oceaniczny świat zatopionych stacji. Pływanie pod wodą – pilnuj tlenu.'],
+  ['#c8e0f0', 'Skuta lodem planeta. Śliskie posadzki, mróz i szturmowcy w bieli.'],
+  ['#50a050', 'Leśny księżyc gigantycznych drzew. Pnącza, platformy i łowcy w cieniu liści.'],
+  ['#e05020', 'Wulkaniczna twierdza Arcylorda. Rzeki lawy, popiół i ostatnia bitwa sagi.'],
+];
+const CTABS = ['WROGOWIE', 'PLANETY', 'STROJE', 'REKORDY'];
+const seen = k => META.codex.includes(k);
+function codexSee() {
+  if (!game.live || game.rush) return;
+  let ch = false;
+  for (const f of FOES) for (const k of [f.k === 'lord' ? lordName(f) : f.k, f.k === 'lord' ? '' : f.sty]) {
+    if (k && CODEX.some(e => e[0] === k) && !seen(k)) { META.codex.push(k); ch = true; }
+  }
+  if (ch) saveMeta();
+}
+const codexLen = () => [CODEX.length, PLANETS.length, OUTFITS.length, 0][game.ctab];
+function openCodex() {
+  if (game.mode === 'play' && P && P.st !== 'ship' && P.st !== 'dead' && !game.lock && !game.qte) {
+    game.mode = 'codex'; game.ctab = game.ctab || 0; game.csel = 0; game.cmsg = ''; for (const k in K) K[k] = false;
+  } else if (game.mode === 'codex') game.mode = 'play';
+}
+function codexKey(k) {
+  const n = CTABS.length;
+  if (k === 'left' || k === 'right') { game.ctab = (game.ctab + (k === 'left' ? n - 1 : 1)) % n; game.csel = 0; game.cmsg = ''; }
+  else if (k === 'up' || k === 'down') { const m = codexLen(); if (m) game.csel = (game.csel + (k === 'up' ? m - 1 : 1)) % m; game.cmsg = ''; }
+  else if (k === 'act' && game.ctab === 2) wearOutfit(OUTFITS[game.csel]);
+  else if (k === 'sheathe' || k === 'codex') game.mode = 'play';
+}
+function codexTap(e) {
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * SW, y = (e.clientY - r.top) / r.height * SH;
+  if (y > 180) { game.mode = 'play'; return; }
+  if (y >= 14 && y <= 27) { const t = Math.floor((x - 20) / 70); if (t >= 0 && t < CTABS.length) { game.ctab = t; game.csel = 0; game.cmsg = ''; } return; }
+  const i = Math.floor((y - 31) / codexRow()), m = codexLen();
+  if (x < 124 && i >= 0 && i < m) { if (game.csel === i && game.ctab === 2) codexKey('act'); else { game.csel = i; game.cmsg = ''; } }
+}
+const codexRow = () => (game.ctab === 0 ? 8.6 : 12);
+// Postać w dużej skali (bez świecących elementów – kolejki EQ/BQ nie są tu rysowane)
+function codexFig(f, x, y, sc) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.translate(-f.x, -f.y);
+  try { drawFoe(f); } catch (er) {}
+  ctx.restore();
+}
+function drawCodex() {
+  ctx.fillStyle = 'rgba(4,6,16,0.94)'; ctx.fillRect(0, 0, SW, SH);
+  txt('ENCYKLOPEDIA ZAKONU', SW / 2, 7, '#f0c040', 'center', 8);
+  CTABS.forEach((t, i) => {
+    const on = i === game.ctab;
+    rrect(20 + i * 70, 14, 66, 12, 2, on ? 'rgba(60,70,110,0.95)' : 'rgba(20,24,38,0.95)');
+    txt(t, 53 + i * 70, 20.5, on ? '#ffe080' : '#8890a8', 'center', 6.5);
+  });
+  const row = codexRow(), list = (items) => items.forEach((it, i) => {
+    const y = 31 + i * row, sel = i === game.csel;
+    if (sel) rrect(6, y, 116, row - 1, 2, 'rgba(60,70,110,0.9)');
+    txt(it[0], 10, y + row / 2 - 0.5, it[1], 'left', row > 10 ? 6.5 : 6);
+  });
+  const desc = (s, y, col) => { for (const l of wrapTxt(s, 176, 6)) { txt(l, 220, y, col || '#c8c0b0', 'center', 6); y += 8; } return y; };
+  if (game.ctab === 0) {
+    list(CODEX.map(e => seen(e[0]) ? [e[1], META.lords.includes(e[0]) ? '#ff9090' : '#c8d0e0'] : ['???', '#4a5064']));
+    const e = CODEX[game.csel], ok = seen(e[0]), lord = game.csel >= 11;
+    if (ok) {
+      const ty = lord ? 'lord' : ['blaster', 'rifle', 'shield', 'sniper', 'drone', 'jet'].includes(e[0]) ? e[0] : 'blaster';
+      const sty = lord ? ['lord', 'lord2', 'lord3', 'lord4', 'lord5', 'lord6'][game.csel - 11] : ty === e[0] ? '' : e[0];
+      const f = mkFoe({ k: ty, sty: sty || undefined, name: lord ? e[0] : undefined, r: 2, c: 5, dir: -1,
+        dbl: lord && [12, 14].includes(game.csel), dual: lord && [13, 15, 16].includes(game.csel) });
+      f.st = 'idle';
+      codexFig(f, 220, ty === 'drone' || ty === 'jet' ? 80 : 112, 2.4);
+      txt(e[1], 220, 124, lord ? '#ff9090' : '#ffe080', 'center', 8);
+      desc(e[2], 136);
+      if (lord) txt(META.lords.includes(e[0]) ? '✓ pokonany' : 'jeszcze niepokonany', 220, 170, META.lords.includes(e[0]) ? '#90ffb0' : '#a08080', 'center', 6);
+    } else { txt('???', 220, 90, '#4a5064', 'center', 14); desc('Jeszcze nie spotkany. Encyklopedia uzupełnia się sama, gdy wejdziesz do komnaty z nowym przeciwnikiem.', 120, '#6a7088'); }
+  } else if (game.ctab === 1) {
+    const ch = chapStarts(), best = META.best || 0;
+    list(ch.map((i, k) => i <= best ? [ROMAN[k] + '. ' + LEVELS[i].chapter.replace(/^ROZDZIAŁ \S+ [–-] /i, ''), '#c8d0e0'] : [ROMAN[k] + '. ???', '#4a5064']));
+    const i = ch[game.csel], P_ = PLANETS[game.csel] || PLANETS[0];
+    if (i <= best) {
+      const cx = 220, cy = 70;
+      ctx.fillStyle = P_[0]; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.arc(cx + 9, cy + 6, 24, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.arc(cx - 9, cy - 9, 8, 0, Math.PI * 2); ctx.fill();
+      txt(LEVELS[i].chapter, cx, 108, '#ffe080', 'center', 7.5);
+      const y = desc(P_[1], 120);
+      const end = ch[game.csel + 1] || LEVELS.length;
+      let st = 0; for (let q = i; q < end; q++) st += (META.lv[q] && META.lv[q].s) || 0;
+      txt('☆ gwiazdki w rozdziale: ' + st + '/' + (end - i) * 3, cx, y + 6, '#c8b890', 'center', 6);
+    } else { txt('???', 220, 90, '#4a5064', 'center', 14); desc('Planeta jeszcze nieodkryta.', 120, '#6a7088'); }
+  } else if (game.ctab === 2) {
+    const cur = outfit();
+    list(OUTFITS.map(o => o.ok() ? [(o === cur ? '► ' : '') + o.name, o === cur ? '#90ffb0' : '#c8d0e0'] : ['🔒 ' + o.name, '#4a5064']));
+    const o = OUTFITS[game.csel];
+    ctx.save(); ctx.translate(220, 112); ctx.scale(2.6, 2.6);
+    try { drawFig(0, 0, 1, POSE.stand, Object.assign({}, STY.hero, o.s), { blade: 'hip', bc: game.blade }); } catch (er) {}
+    ctx.restore();
+    if (!o.ok()) { ctx.fillStyle = 'rgba(4,6,16,0.7)'; ctx.fillRect(170, 26, 100, 90); }
+    txt(o.name, 220, 124, '#ffe080', 'center', 8);
+    desc(o.ok() ? o.d : 'Odblokuj: ' + o.need, 136, o.ok() ? '#c8c0b0' : '#a08080');
+    if (game.cmsg) txt(game.cmsg, 220, 168, '#ffe080', 'center', 6);
+  } else {
+    const ch = chapStarts();
+    ch.forEach((i, k) => {
+      const x = 8 + k * 52, end = ch[k + 1] || LEVELS.length;
+      txt(ROMAN[k], x + 24, 33, '#f0c040', 'center', 7);
+      for (let q = i; q < end; q++) {
+        const o = META.lv[q], y = 42 + (q - i) * 13;
+        txt(String(q + 1), x + 2, y, '#8890a8', 'left', 5.5);
+        txt(o ? '★'.repeat(o.s) + '☆'.repeat(3 - o.s) : '☆☆☆', x + 12, y, o ? '#ffe080' : '#3a4050', 'left', 5.5);
+        if (o && o.t) txt(fmtT(o.t), x + 50, y, '#a8b0c8', 'right', 5);
+      }
+    });
+    txt('☆ Gwiazdki: ' + starSum() + '/' + LEVELS.length * 3 + '    ✦ Sagi ukończone: ' + (META.wins || 0) +
+      (META.ngc ? '  (NG+ cykl ' + META.ngc.ngp + ')' : ''), SW / 2, 132, '#c8d0e0', 'center', 6.5);
+    txt('⚔ Starcia z Lordami: ' + (META.rush ? META.rush.n + ' Lordów w ' + fmtT(META.rush.t) : 'brak rekordu'), SW / 2, 144, '#ff9090', 'center', 6.5);
+    txt('Gwiazdki: ukończenie · bez rany · czas w normie (przelot: ≤2 trafienia · bez trafienia)', SW / 2, 158, '#6a7088', 'center', 5);
+  }
+  txt('←→ zakładka · ↑↓ wybór' + (game.ctab === 2 ? ' · A załóż' : '') + ' · E/S zamknij', SW / 2, 189, '#8890a8', 'center', 6.5);
+}
+
+// ===== Stroje bohatera =====
+const OUTFITS = [
+  { id: 'std', name: 'Płaszcz zakonu', need: '', ok: () => true, d: 'Klasyczny strój rycerza Zakonu Mistrzów.', s: {} },
+  { id: 'sand', name: 'Strój z Sarrak', need: 'dotrzyj do rozdziału II.', ok: () => (META.best || 0) >= 6, d: 'Lekka tkanina chroniąca przed piaskiem pustyni.',
+    s: { cloak: '#c8a060', cloakB: '#9a7840', body: '#eadcb4', bodyB: '#c0a878', arm: '#dcc494', armB: '#a89060', hair: '#6a4020' } },
+  { id: 'deep', name: 'Kombinezon głębin', need: 'dotrzyj do rozdziału III.', ok: () => (META.best || 0) >= 12, d: 'Szczelny kombinezon nurków z Thalos.',
+    s: { cloak: '#1e5060', cloakB: '#143a46', body: '#4a8a98', bodyB: '#326a78', arm: '#5a9aa8', armB: '#3a7080', leg: '#24404a', legB: '#18303a' } },
+  { id: 'fur', name: 'Futro z Krio', need: 'dotrzyj do rozdziału IV.', ok: () => (META.best || 0) >= 18, d: 'Ciepłe futro tropicieli lodowej planety.',
+    s: { cloak: '#e8eef4', cloakB: '#b0bcc8', body: '#c8d4e0', bodyB: '#98a8b8', arm: '#d0dce8', armB: '#a0b0c0', belt: '#5a6a7a' } },
+  { id: 'pilot', name: 'Kombinezon pilota', need: 'osiągnięcie „As przestworzy”.', ok: () => !!META.achv.pilot, d: 'Pomarańczowy kombinezon pilotów Republiki.',
+    s: { cloak: '#c85020', cloakB: '#903818', body: '#e07030', bodyB: '#b05020', arm: '#e07030', armB: '#b05020', belt: '#e8e8e8' } },
+  { id: 'white', name: 'Biała szata mistrza', need: 'ukończ grę.', ok: () => !!META.achv.saga, d: 'Szata członków Nowej Rady Zakonu.',
+    s: { cloak: '#f0ece0', cloakB: '#c8c0b0', body: '#fffaf0', bodyB: '#d8d0c0', arm: '#f4f0e4', armB: '#c8c0b0', leg: '#d8d0c0', legB: '#a8a090', belt: '#c0a060' } },
+  { id: 'shadow', name: 'Czarny pancerz', need: 'osiągnięcie „Ścieżka gniewu”.', ok: () => !!META.achv.dark, d: 'Zbroja tych, którzy przyjęli moc gniewu.',
+    s: { cloak: '#1a1418', cloakB: '#0e0a0e', body: '#2a242a', bodyB: '#1a161a', arm: '#2a242a', armB: '#1a161a', leg: '#1a161a', legB: '#0e0c0e', belt: '#8a1420' } },
+  { id: 'gold', name: 'Złota zbroja Rady', need: 'pokonaj wszystkich sześciu Lordów.', ok: () => !!META.achv.lords, d: 'Ceremonialna zbroja pogromców Lordów.',
+    s: { cloak: '#8a2020', cloakB: '#601414', body: '#e8c050', bodyB: '#b89030', arm: '#e0b848', armB: '#a88028', belt: '#6a4010' } },
+];
+const outfit = () => OUTFITS.find(o => o.id === META.outfit && o.ok()) || OUTFITS[0];
+const HEROS = {};
+const heroSty = () => { const o = outfit(); return HEROS[o.id] || (HEROS[o.id] = Object.assign({}, STY.hero, o.s)); };
+function wearOutfit(o) {
+  if (!o.ok()) { game.cmsg = 'Strój zablokowany – ' + o.need; SND.click(); return; }
+  META.outfit = o.id; saveMeta(); game.cmsg = 'Założono: ' + o.name; SND.ignite();
+}
+
+// ===== Nowa gra+ =====
+// Po ukończeniu sagi umiejętności, kryształy, ostrze i ulepszenia myśliwca przechodzą do kolejnego cyklu;
+// wrogowie mają +1 życie, Lordowie +2 (z każdym cyklem).
+function sagaWon() {
+  META.wins = (META.wins || 0) + 1;
+  META.ngc = { ngp: (game.ngp || 0) + 1, crys: game.crys, spent: game.spent, sk: Object.assign({}, game.sk), slots: game.slots.slice(),
+    maxHp: game.maxHp, blade: game.blade.id, ship: Object.assign({}, game.shipUp || {}) };
+  saveMeta();
+}
+function ngGame() {
+  const c = META.ngc;
+  if (!c) { beginGame(); return; }
+  leaveTitle(); newGame();
+  game.crys = game.crysLvl = c.crys; game.spent = c.spent; game.sk = Object.assign({}, c.sk); game.slots = c.slots.slice();
+  game.maxHp = game.lvlMax = c.maxHp; game.blade = bladeById(c.blade); game.shipUp = Object.assign(shipUp0(), c.ship || {});
+  game.ngp = c.ngp; game.lp = undefined; game.snap = skSnap(); updLabels();
+  P.max = P.hp = hpMax();
+  saveRun();
+}
+
+// ===== Starcia z Lordami (boss rush) =====
+// Kolejni pokonani Lordowie (do najdalszego poziomu), start od razu w ich sali. Życie przechodzi dalej (+1 po każdym).
+const lordRoom = i => (LEVELS[i].rooms || []).findIndex(R => (R.foes || []).some(f => f.k === 'lord'));
+const rushList = () => LEVELS.map((l, i) => i).filter(i => i <= (META.best || 0) && lordRoom(i) >= 0);
+function rushGame() {
+  const list = rushList();
+  if (!list.length) return;
+  leaveTitle();
+  game.vEnd = false; game.dark = 0; game.path = ''; game.lp = undefined; game.ngp = 0; game.shipUp = shipUp0();
+  game.maxHp = 5; game.time = 0; game.crys = 0; game.spent = 0; game.blade = BLADES[0];
+  game.sk = {}; SKILLS.forEach(c => c.nodes.forEach(n => { game.sk[n.id] = n.free ? 0 : 2; }));
+  game.slots = ['pull', 'bolt'];
+  game.rush = { list, i: 0, hp: 0 };
+  loadLevel(list[0]);
+}
+function rushNext() {
+  const R = game.rush;
+  R.hp = Math.min(P.max, P.hp + 1); R.i++;
+  if (R.i < R.list.length) { loadLevel(R.list[R.i]); toast('⚔ LORD POKONANY', 'Starcie ' + (R.i + 1) + '/' + R.list.length, '+1 życie przed kolejną walką'); return; }
+  const n = R.list.length, t = game.time, o = META.rush;
+  R.rec = !o || n > o.n || (n === o.n && t < o.t);
+  if (R.rec) { META.rush = { n, t: Math.round(t * 10) / 10 }; saveMeta(); }
+  game.mode = 'win'; SND.win();
+}
+function drawRushWin() {
+  ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, SW, 180);
+  const R = game.rush;
+  txt('STARCIA Z LORDAMI', SW / 2, 60, '#ff7060', 'center', 13);
+  txt('Pokonani Lordowie: ' + R.list.length + '   Czas: ' + fmtT(game.time), SW / 2, 84, '#e8d8b0', 'center', 8);
+  txt(R.rec ? 'NOWY REKORD!' : 'Rekord: ' + META.rush.n + ' Lordów w ' + fmtT(META.rush.t), SW / 2, 100, R.rec ? '#ffe080' : '#a8a0c0', 'center', 8);
+  txt('A – menu główne', SW / 2, 124, '#a0a0b0');
 }

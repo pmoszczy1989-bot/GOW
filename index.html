@@ -20,12 +20,15 @@
   #voiceb { position: absolute; top: max(6px, env(safe-area-inset-top)); right: calc(max(6px, env(safe-area-inset-right)) + 120px);
     z-index: 6; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .3);
     background: rgba(20, 20, 30, .55); color: #e8d8b0; font-size: 17px; line-height: 1; cursor: pointer; padding: 0; }
-  #full:hover, #treeb:hover, #gearb:hover, #voiceb:hover { background: rgba(240, 192, 64, .3); }
+  #full:hover, #treeb:hover, #gearb:hover, #voiceb:hover, #codexb:hover { background: rgba(240, 192, 64, .3); }
   #treeb { position: absolute; top: max(6px, env(safe-area-inset-top)); right: calc(max(6px, env(safe-area-inset-right)) + 40px);
     z-index: 6; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(120, 220, 255, .4);
     background: rgba(20, 20, 30, .55); color: #7fe0ff; font-size: 18px; line-height: 1; cursor: pointer; padding: 0; }
 
   #gearb { position: absolute; top: max(6px, env(safe-area-inset-top)); right: calc(max(6px, env(safe-area-inset-right)) + 80px);
+    z-index: 6; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(240, 192, 64, .45);
+    background: rgba(20, 20, 30, .55); color: #f0c040; font-size: 18px; line-height: 1; cursor: pointer; padding: 0; }
+  #codexb { position: absolute; top: max(6px, env(safe-area-inset-top)); right: calc(max(6px, env(safe-area-inset-right)) + 160px);
     z-index: 6; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(240, 192, 64, .45);
     background: rgba(20, 20, 30, .55); color: #f0c040; font-size: 18px; line-height: 1; cursor: pointer; padding: 0; }
 
@@ -93,12 +96,14 @@
   #acts .dash svg { width: 19px; height: 19px; }
   #acts .mega { right: 70px; bottom: 130px; width: 46px; height: 46px; border-color: rgba(150, 190, 255, .6); }
   #acts .mega svg { width: 19px; height: 19px; }
+  #acts .hook { right: 6px; bottom: 150px; width: 46px; height: 46px; border-color: rgba(150, 190, 255, .6); }
+  #acts .hook svg { width: 19px; height: 19px; }
   #acts .sheathe svg { width: 19px; height: 19px; }
   #acts small { display: block; max-width: 84%; font: bold 7.5px/1.25 sans-serif; color: rgba(255,255,255,.8); text-align: center;
     white-space: nowrap; letter-spacing: -.2px; pointer-events: none; }
   #acts small b { display: block; color: #ffe080; font-size: 8px; line-height: 1.05; }
-  #acts .dash small, #acts .mega small, #acts .sheathe small { font-size: 6.5px; }
-  #acts .dash small b, #acts .mega small b, #acts .sheathe small b { font-size: 7px; }
+  #acts .dash small, #acts .mega small, #acts .hook small, #acts .sheathe small { font-size: 6.5px; }
+  #acts .dash small b, #acts .mega small b, #acts .hook small b, #acts .sheathe small b { font-size: 7px; }
   @media (max-height: 380px) {
     #stick { width: 112px; height: 112px; }
     #knob { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
@@ -113,6 +118,7 @@
 <button id="treeb" title="Drzewko umiejętności (U)">✦</button>
 <button id="voiceb" title="Głosy lektora (V)">🔊</button>
 <button id="gearb" title="Kolekcja ostrzy i osiągnięcia (O)">◈</button>
+<button id="codexb" title="Encyklopedia: wrogowie, planety, stroje, rekordy (E)">📖</button>
 
 <div id="title">
   <div class="box">
@@ -126,15 +132,16 @@
       i platformami. Między planetami lecisz myśliwcem. Każdy rozdział kończy Lord z czerwonym ostrzem.
       Kryształy (10 = 1 punkt) rozwijają moce w drzewku umiejętności.</p>
     <p class="pc">
-      <kbd>←</kbd><kbd>→</kbd> bieg &nbsp; <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> ostrożny krok &nbsp; <kbd>D</kbd>+<kbd>←</kbd><kbd>→</kbd> bieg aury (szybciej i dalszy skok, zużywa aurę) &nbsp; <kbd>↑</kbd> skok / zasłona &nbsp; <kbd>C</kbd> mega skok (aura) &nbsp; <kbd>↓</kbd> kucnięcie / zwis<br>
+      <kbd>←</kbd><kbd>→</kbd> bieg &nbsp; <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> ostrożny krok &nbsp; <kbd>D</kbd>+<kbd>←</kbd><kbd>→</kbd> bieg aury (szybciej i dalszy skok, zużywa aurę) &nbsp; <kbd>↑</kbd> skok / zasłona &nbsp; <kbd>C</kbd> mega skok (aura) &nbsp; <kbd>G</kbd> linka z hakiem &nbsp; <kbd>↓</kbd> kucnięcie / zwis<br>
       <kbd>A</kbd> wyciągnij ostrze i tnij (odbija strzały) / podnieś / użyj &nbsp; <kbd>S</kbd> schowaj ostrze<br>
       <kbd>Z</kbd> <kbd>X</kbd> moce aury w dwóch slotach (na start: przyciągnięcie + QTE <kbd>A</kbd> i odepchnięcie)<br>
       <kbd>U</kbd> drzewko umiejętności: pioruny, uścisk, tarcza, omamienie, leczenie, rzut ostrzem, kombinacje, zwinność<br>
-      <kbd>O</kbd> kolekcja ostrzy (6 ukrytych kryształów ◆ – po jednym na rozdział) i osiągnięcia &nbsp; Gra zapisuje się na początku każdego poziomu<br>
+      <kbd>O</kbd> kolekcja ostrzy (6 ukrytych kryształów ◆ – po jednym na rozdział) i osiągnięcia &nbsp; <kbd>E</kbd> encyklopedia (wrogowie, planety, stroje, rekordy ★)<br>
+      Gra zapisuje się na początku każdego poziomu, zebrane kryształy nie wracają po śmierci &nbsp; Po ukończeniu: Nowa gra+ i starcia z Lordami<br>
       Pod wodą <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> pływanie (pilnuj tlenu) &nbsp; <kbd>R</kbd> powtórz poziom &nbsp; <kbd>F</kbd> pełny ekran &nbsp; <kbd>V</kbd> głosy lektora wł./wył.
     </p>
     <p class="mob">Gałka w lewym dolnym rogu – ruch (lekkie wychylenie = ostrożny krok).<br>
-      Przyciski po prawej: ostrze / cios, skok, dwie moce (sloty), schowanie ostrza. ✦ u góry – drzewko umiejętności, ◈ – kolekcja ostrzy i osiągnięcia.<br>
+      Przyciski po prawej: ostrze / cios, skok, dwie moce (sloty), bieg, mega skok, linka, schowanie ostrza. ✦ u góry – drzewko umiejętności, ◈ – kolekcja ostrzy i osiągnięcia, 📖 – encyklopedia.<br>
       Najlepiej grać poziomo i w pełnym ekranie (⛶).</p>
     <div id="menu"></div>
     <p class="go"><span class="pc">Enter – start</span><span class="mob">Dotknij ekranu, aby zacząć</span></p>
@@ -146,6 +153,7 @@
   <span><kbd>Shift</kbd>krok</span>
 <span><kbd>D</kbd>bieg aury</span>
     <span><kbd>C</kbd>mega skok</span>
+  <span><kbd>G</kbd>linka</span>
   <span><kbd>↑</kbd>skok</span>
   <span><kbd>↓</kbd>zwis</span>
   <span><kbd>A</kbd>ostrze / cios</span>
@@ -153,6 +161,7 @@
   <span><kbd>Z</kbd><kbd>X</kbd>moce (sloty)</span>
   <span><kbd>U</kbd>drzewko umiejętności</span>
   <span><kbd>O</kbd>kolekcja</span>
+  <span><kbd>E</kbd>encyklopedia</span>
   <span><kbd>R</kbd>restart</span>
   <span><kbd>F</kbd>pełny ekran</span>
   <span><kbd>V</kbd>głosy</span>
@@ -182,6 +191,9 @@
     <!-- Mega skok aury -->
     <button class="mega" data-k="mega" aria-label="Mega skok"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
       <path d="M6 26 Q16 -2 26 26"/><path d="M22 20 L26 26 L29 19"/><path d="M4 29 H12"/></svg><small>MEGA<b>(C)</b></small></button>
+    <!-- Linka z hakiem -->
+    <button class="hook" data-k="hook" aria-label="Linka z hakiem"><svg viewBox="0 0 32 32" fill="none" stroke="#a8c8ff" stroke-width="2.2" stroke-linecap="round">
+      <path d="M4 28 L20 12" stroke-dasharray="3 2"/><path d="M20 12 V5 M20 12 H27 M20 12 L26 6"/></svg><small>LINKA<b>(G)</b></small></button>
     <!-- Schowaj ostrze -->
     <button class="sheathe" data-k="sheathe" aria-label="Schowaj ostrze"><svg viewBox="0 0 32 32">
       <rect x="13" y="6" width="6" height="16" rx="2" fill="#8a94a4"/><rect x="11" y="21" width="10" height="3" rx="1" fill="#c0c8d4"/>
@@ -189,9 +201,9 @@
   </div>
 </div>
 
-<script src="meta.js?v=25"></script>
-<script src="levels.js?v=25"></script>
-<script src="game.js?v=25"></script>
-<script src="ship.js?v=25"></script>
+<script src="meta.js?v=26"></script>
+<script src="levels.js?v=26"></script>
+<script src="game.js?v=26"></script>
+<script src="ship.js?v=26"></script>
 </body>
 </html>

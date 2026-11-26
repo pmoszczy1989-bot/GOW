@@ -35,11 +35,24 @@ Przyciski Z/X zmieniają ikonę i podpis zależnie od mocy przypisanej do slotu.
 | U | drzewko umiejętności (←→↑↓ wybór, A – ulepsz, Z/X – przypisz moc do slotu, Esc/U – zamknij) |
 | ↑ w walce | zasłona – odbija strzały i paruje ciosy |
 | O | kolekcja ostrzy i osiągnięcia (←→↑↓ wybór, A – załóż ostrze, O/Esc – zamknij) |
+| G | **linka z hakiem**: wystrzeliwuje linkę do krawędzi wyżej / dalej w kierunku patrzenia i podciąga bohatera (przycisk LINKA na dotyku) |
+| E | encyklopedia Zakonu (←→ zakładka: Wrogowie, Planety, Stroje, Rekordy; ↑↓ wybór; A – załóż strój; E/Esc – zamknij; przycisk 📖) |
 | R | powtórz poziom |
 | F | pełny ekran |
 | V | głosy lektora wł./wył. (też przycisk 🔊) |
 
-Lot statkiem: ←→↑↓ ruch, **A** działa (przytrzymaj), **Z** torpeda, **X** beczka (unik).
+Lot myśliwcem: ←→↑↓ ruch, **A** działa (przytrzymaj), **Z** torpeda naprowadzana na „CEL”, **X** beczka (unik; na ścigaczu – skok).
+W hangarze przed lotem: ←→ wybór, **A** kup ulepszenie, **S**/**Enter** – start.
+
+**Loty myśliwcem (widok zza myśliwca).** Pięć lotów w pseudo-3D – kamera leci tuż za myśliwcem „Szpon”, świat pędzi ku graczowi:
+*Ucieczka z orbity* (pościg i pole szczątków, skok nadprzestrzenny), *Blokada orbitalna* (kordon wrogów i krążownik Klinga –
+najpierw wieżyczki, potem rdzeń), *Przełęcz Mgławicy* (skalne kolumny, łuki i asteroidy wśród błyskawic), *Pościg w lasach Verdan*
+(ścigacz między drzewami, pnie nad drogą, zwiadowcy wyprzedzający od tyłu; ↑↓ zmienia wysokość) i *Szturm na flotę Arcylorda*
+(rów okrętu flagowego, wieżyczki, zapory, na końcu reaktor – najpierw emitery osłony, potem rdzeń).
+Trafienia zdejmują najpierw tarczę (odnawia się), potem serca kadłuba. Zestrzelenia dają kryształy po locie; z bombowców
+wypadają naprawa, ogniwo tarczy i torpeda. **Hangar**: ulepszenia za kryształy (poziomy 1–3 po 10/20/30 ◆) – **Działa**
+(szybszy ogień, większe obrażenia, od poz. 2 cztery lufy), **Tarcza** (pojemność 1→5, szybsza odnowa), **Torpedy** (zapas 2→7,
+lepsze naprowadzanie). Nie można wydać kryształów związanych z wydanymi punktami umiejętności (`game.shipUp`).
 
 ## Poziomy
 
@@ -121,8 +134,19 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
 - Lód `I` ślizga się, grzyb `J` wybija wysoko, dysza `F` zieje ogniem cyklicznie, lawa `V` zabija.
 - Ruchome piaski `Q` spowalniają i wciągają – nie zatrzymuj się. Miny `N` wybuchają przy dotyku (cięcie pod wodą je rozbraja).
 - Krata otwiera się po naciśnięciu płyty, konsola `K` wyłącza bariery i blokuje kratę w górze.
-- **Zapis**: gra zapisuje się na początku każdego poziomu (`localStorage` `gow_save`). Menu tytułowe: *Kontynuuj*,
-  *Nowa gra* (N), wybór odblokowanego rozdziału (1–6). Postęp trwały – osiągnięcia, ostrza, rekordy – w `gow_meta`.
+- **Zapis**: gra zapisuje się na początku każdego poziomu (`localStorage` `gow_save`: m.in. `got` – kryształy mapy zebrane
+  na tym poziomie, `ngp` – cykl Nowej gry+, `ship` – ulepszenia myśliwca). Menu tytułowe: *Kontynuuj*,
+  *Nowa gra* (N), wybór odblokowanego rozdziału (1–6). Postęp trwały – osiągnięcia, ostrza, rekordy – w `gow_meta`
+  (`lv` gwiazdki i czasy, `codex`, `outfit`, `wins`, `ngc`, `rush`).
+- **Kryształy po śmierci**: kryształy `O` zebrane na poziomie nie pojawiają się ponownie po śmierci ani po wczytaniu zapisu (zostają policzone).
+- **Gwiazdki** (☆, maks. 3 na poziom, 105 łącznie): ukończenie, bez rany, czas w normie (`parT`); w lotach: ≤2 trafienia i bez trafienia.
+  Najlepsze czasy i gwiazdki w zakładce Rekordy encyklopedii.
+- **Encyklopedia** (**E**, 📖): wrogowie i Lordowie (odblokowują się przy spotkaniu), planety, stroje i rekordy.
+- **Stroje** (8): płaszcz zakonu, strój z Sarrak, kombinezon głębin, futro z Krio (kolejne rozdziały), kombinezon pilota
+  (lot bez trafienia), białe szaty mistrza (ukończenie sagi), czarny pancerz (zakończenie gniewu), złota zbroja (wszyscy Lordowie).
+- **Nowa gra+** (**P**, po ukończeniu sagi): zachowujesz umiejętności, kryształy, ostrze i ulepszenia myśliwca; wrogowie mają więcej życia.
+- **Starcia z Lordami** (**B**, po pokonaniu Lorda): kolejne walki z odblokowanymi Lordami pod rząd, 5 żyć (+1 po każdej wygranej),
+  moce na poziomie 2; rekord (liczba Lordów i czas) w encyklopedii.
 - **Kolekcja ostrzy** (**O**): kolory bazowe (rękojeść losuje nieczerwony kolor, pokonany Lord zostawia nowy) oraz
   6 ostrzy specjalnych z ukrytych kryształów `C` (po jednym na rozdział): bursztynowe (szybsza aura),
   srebrne (dłuższy zasięg), turkusowe (dwa ostrza, +1 kombo), różane (+1 kryształ za wroga),
@@ -141,10 +165,10 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
 | Plik | Opis |
 |---|---|
 | `index.html` | płótna, ekran tytułowy, przycisk ⛶, pasek klawiszy `#keys`, sterowanie dotykowe `#touch` (`#stick`/`#knob`, `button[data-k]`); ładuje skrypty `?v=N` |
-| `meta.js` | zapis (`saveRun`/`runSave`), menu tytułowe (`buildMenu`), kolekcja ostrzy (`XBLADES`, `drawGear`), osiągnięcia (`ACHV`/`achv`), fabuła (`STORY`, `showStory`) – ładowany pierwszy |
+| `meta.js` | zapis (`saveRun`/`runSave`), menu tytułowe (`buildMenu`), kolekcja ostrzy (`XBLADES`, `drawGear`), osiągnięcia (`ACHV`/`achv`), fabuła (`STORY`, `showStory`), gwiazdki (`levelStars`), encyklopedia (`CODEX`, `drawCodex`), stroje (`OUTFITS`), Nowa gra+ (`ngGame`), starcia z Lordami (`rushGame`/`rushNext`) – ładowany pierwszy |
 | `levels.js` | `LEVELS` – definicje poziomów i komnat |
 | `game.js` | silnik: wejście (klawiatura, dotyk, pełny ekran), stan, komnaty, fizyka, gracz, wrogowie, aura, QTE, pływanie, pułapki, rysowanie, światło, dźwięk, pętla |
-| `ship.js` | poziomy lotu statkiem (`startShip`, `updShip`, `drawShip`, `shipHint`, `SHIP`) |
+| `ship.js` | loty myśliwcem w pseudo-3D z hangarem ulepszeń (`startShip`, `updShip`, `drawShip`, `shipHint`, `SHIP`, `SHIP.phase` = shop/fly/boss/jump/won) |
 
 Kolejność skryptów: `meta.js → levels.js → game.js → ship.js`.
 
