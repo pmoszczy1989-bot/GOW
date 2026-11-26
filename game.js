@@ -397,12 +397,26 @@ function treeKey(k) {
   else if (k === 'sheathe' || k === 'tree') { game.mode = 'play'; }
   updLabels();
 }
+// Ikony mocy na przyciskach dotykowych Z / X (SVG 32×32, kontur w kolorze aury)
+const PICON = {
+  pull: '<path d="M27 6 Q19 16 27 26"/><path d="M21 9 Q15 16 21 23"/><path d="M15 16 H4"/><path d="M8 12 L4 16 L8 20"/>',
+  push: '<path d="M17 6 Q25 16 17 26"/><path d="M23 9 Q29 16 23 23"/><path d="M4 16 H14"/><path d="M10 12 L14 16 L10 20"/>',
+  shield: '<path d="M16 4 L26 8 V16 Q26 24 16 29 Q6 24 6 16 V8 Z"/><path d="M16 9 V24" stroke-width="1.4"/>',
+  trick: '<path d="M4 16 Q16 6 28 16 Q16 26 4 16 Z"/><circle cx="16" cy="16" r="3.5"/><path d="M20 6 L23 3 M12 6 L9 3" stroke-width="1.4"/>',
+  heal: '<path d="M16 27 Q4 19 5 11 Q7 5 13 7 Q15 8 16 10 Q17 8 19 7 Q25 5 27 11 Q28 19 16 27 Z"/><path d="M16 12 V21 M11.5 16.5 H20.5" stroke="#90ffb0"/>',
+  throw: '<path d="M7 25 L23 9" stroke="#7fe0ff" stroke-width="3"/><path d="M4 28 L8 24" stroke="#c0c8d4" stroke-width="3"/><path d="M14 4 Q27 5 28 18" stroke-dasharray="2 3"/><path d="M28 18 L25 14 M28 18 L30 14" stroke-width="1.6"/>',
+  choke: '<path d="M9 26 V14 Q9 11 11 11 Q13 11 13 14 V12 Q13 9 15 9 Q17 9 17 12 V12 Q17 10 19 10 Q21 10 21 13 Q21 11 23 12 Q24 13 24 15 V20 Q24 26 18 27 H12"/><path d="M5 6 Q10 3 14 6 M18 5 Q23 2 27 6" stroke-width="1.4"/>',
+  bolt: '<path d="M18 3 L8 17 H15 L12 29 L24 13 H17 Z" stroke="#c0a0ff"/>'
+};
 // Etykiety przycisków dotykowych Z / X – nazwa mocy w slocie
 function updLabels() {
   const ab = { pull: 'PRZYC', push: 'ODEP', shield: 'TARCZA', trick: 'OMAM', heal: 'LECZ', throw: 'RZUT', choke: 'UŚCISK', bolt: 'PIORUN' };
   ['pull', 'push'].forEach((k, i) => {
-    const el = document.querySelector('#acts button[data-k="' + k + '"] small');
-    if (el && game.slots) el.textContent = ab[game.slots[i]] || '';
+    const bt = document.querySelector('#acts button[data-k="' + k + '"]');
+    if (!bt || !game.slots) return;
+    const id = game.slots[i], el = bt.querySelector('small'), sv = bt.querySelector('svg');
+    if (el) el.textContent = ab[id] || '';
+    if (sv && PICON[id]) { sv.innerHTML = PICON[id]; bt.setAttribute('aria-label', PNAME[id] || id); }
   });
 }
 // Drzewko na ekranie dotykowym: stuknięcie węzła = wybór, ponowne = ulepszenie
