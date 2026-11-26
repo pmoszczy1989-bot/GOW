@@ -37,6 +37,7 @@ Przyciski Z/X zmieniają ikonę i podpis zależnie od mocy przypisanej do slotu.
 | O | kolekcja ostrzy i osiągnięcia (←→↑↓ wybór, A – załóż ostrze, O/Esc – zamknij) |
 | R | powtórz poziom |
 | F | pełny ekran |
+| V | głosy lektora wł./wył. (też przycisk 🔊) |
 
 Lot statkiem: ←→↑↓ ruch, **A** działa (przytrzymaj), **Z** torpeda, **X** beczka (unik).
 
@@ -127,7 +128,12 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
   srebrne (dłuższy zasięg), turkusowe (dwa ostrza, +1 kombo), różane (+1 kryształ za wroga),
   złote (szansa na podwójne obrażenia), pryzmatyczne (zmienia kolor, tańsze moce).
 - **Osiągnięcia** (17) – wyskakują jako komunikat u góry ekranu, lista w kolekcji.
-- **Fabuła**: przekazy holograficzne Ael przed każdym rozdziałem. Pioruny i uścisk przybliżają ku ciemności;
+- **Fabuła** (świat autorski): 200 lat po śmierci Liry Sol, wnuczki Imperatora, odrodzony Zakon Rycerzy Ostrza
+  strzeże młodej Republiki po upadku Imperium i Żelaznego Ładu. W Nowej Radzie zasiadają mistrz Davan Korr
+  (prawnuk legendarnego mistrza Korra) i sędziwy mistrz Oko. Nowa gra zaczyna się przewijanymi napisami
+  w perspektywie z fanfarą (`CRAWL`, `drawCrawl`; A – dalej, S – pomiń), potem przekazy holograficzne Ael przed każdym rozdziałem.
+- **Głosy**: lektor (Web Speech API, polski głos systemu, offline) czyta napisy, wiadomości Ael, kwestie Arcylorda,
+  zakończenie i komunikaty w grze – każda postać ma inną barwę. Wyłączanie: V lub 🔊 (`gow_voice` w `localStorage`). Pioruny i uścisk przybliżają ku ciemności;
   w finale wybierasz zakończenie (światło / gniew).
 
 ## Pliki

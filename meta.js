@@ -5,6 +5,7 @@
 //
 // localStorage:
 //   gow_save – bieżący bieg (stan na początku poziomu): lvl, crys, spent, sk, slots, maxHp, time, blade, dark
+//   gow_voice – false = głosy lektora wyłączone
 //   gow_meta – trwałe postępy: best (najdalszy poziom), achv {id: data}, blades [id], lords [imiona]
 
 const SAVE_KEY = 'gow_save', META_KEY = 'gow_meta';
@@ -212,72 +213,170 @@ function drawGear() {
   txt('←→↑↓ wybór · A załóż ostrze · O/S zamknij', SW / 2, 189, '#8890a8', 'center', 6.5);
 }
 
-// ===== Fabuła: holograficzne wiadomości mistrzyni Ael między rozdziałami =====
+// ===== Głosy: lektor czyta napisy, wiadomości Ael, kwestie Lordów i podpowiedzi (Web Speech API, offline) =====
+// gow_voice – false = wyciszone. Brak polskiego głosu w systemie → czyta domyślny głos przeglądarki.
+const VOICE = {
+  on: lsGet('gow_voice') !== false, last: '', lastT: 0,
+  ok: () => 'speechSynthesis' in window,
+  pick(role) {
+    const all = this.ok() ? speechSynthesis.getVoices() : [], pl = all.filter(v => /^pl/i.test(v.lang));
+    const male = pl.find(v => /adam|marek|krzysztof|jacek|jan|male|mężczyzna/i.test(v.name));
+    const fem = pl.find(v => /paulina|zofia|zosia|agnieszka|ewa|maja|female|kobieta/i.test(v.name));
+    if (role === 'ael') return fem || pl[0] || null;
+    if (role === 'lord' || role === 'nar') return male || pl[0] || null;
+    return pl[0] || null;
+  },
+  // Barwa: lektor niski i spokojny, Ael jaśniej, Lord bardzo nisko i wolno, podpowiedzi szybciej
+  STYLE: { nar: [0.75, 0.92, 1], ael: [1.2, 1.0, 1], lord: [0.1, 0.8, 1], hint: [1.0, 1.12, 0.85] },
+  say(text, role, keep) {
+    if (!this.on || !this.ok() || !text) return;
+    if (!keep) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(String(text).replace(/[„”"«»]/g, '').replace(/…/g, '...').replace(/ – /g, ', '));
+    const st = this.STYLE[role] || this.STYLE.hint, v = this.pick(role);
+    if (v) u.voice = v;
+    u.lang = v ? v.lang : 'pl-PL'; u.pitch = st[0]; u.rate = st[1]; u.volume = st[2];
+    speechSynthesis.speak(u);
+  },
+  // Komunikaty w grze – bez przerywania fabuły i bez powtórek tego samego zdania
+  hint(text) {
+    if (!this.on || !this.ok() || speechSynthesis.speaking) return;
+    const now = Date.now();
+    if (text === this.last && now - this.lastT < 6000) return;
+    this.last = text; this.lastT = now;
+    this.say(text, /Lord|Pani Burz|Królowa|Łowca|Arcylord/.test(text) && /„/.test(text) ? 'lord' : 'hint', true);
+  },
+  stop() { if (this.ok()) speechSynthesis.cancel(); },
+  toggle() {
+    this.on = !this.on; lsSet('gow_voice', this.on); if (!this.on) this.stop();
+    const b = document.getElementById('voiceb'); if (b) b.textContent = this.on ? '🔊' : '🔇';
+    return this.on;
+  },
+};
+if (VOICE.ok()) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); }
+// Czytanie bieżącej strony fabuły
+function storySpeak() {
+  const S = game.story; if (!S) return;
+  const pg = S.pages[S.i];
+  if (pg.crawl) {
+    VOICE.say('Dawno temu, wśród odległych gwiazd...', 'nar');
+    VOICE.say(CRAWL.ep + '. ' + CRAWL.title + '.', 'nar', true);
+    CRAWL.paras.forEach(p => VOICE.say(p, 'nar', true));
+  } else if (pg.choice) VOICE.say(pg.lines.join(' ') + ' ' + pg.opts.join(', albo: ') + '?', 'nar');
+  else VOICE.say(pg.lines.join(' '), pg.who === 'lord' ? 'lord' : pg.who === 'ael' ? 'ael' : 'nar');
+}
+
+// ===== Fabuła: napisy otwierające (przewijane w perspektywie) i holowiadomości mistrzyni Ael =====
+// Świat autorski: 200 lat po śmierci Liry Sol odrodzony Zakon Rycerzy Ostrza pilnuje młodej Republiki
+const CRAWL = {
+  ep: 'ROZDZIAŁ I', title: 'CIEŃ NA RUBIEŻACH',
+  paras: [
+    'Minęło dwieście lat od śmierci Liry Sol, wnuczki Imperatora, która zwróciła się przeciw własnej krwi, zgasiła mrok i odbudowała Zakon Rycerzy Ostrza.',
+    'Po upadku Imperium i jego następcy, Żelaznego Ładu, odrodzona Republika rośnie szybciej, niż potrafi się bronić. Senat spiera się o szlaki handlowe, a światy dalekich rubieży czują się zapomniane.',
+    'W Nowej Radzie Zakonu zasiadają mistrz Davan Korr, prawnuk legendarnego mistrza Korra, oraz sędziwy mistrz Oko – maleńki strażnik, który pamięta jeszcze czasy Imperium.',
+    'Z ruin dawnych twierdz powstał tajemniczy ARCYLORD. Jego uczniowie, Lordowie czerwonych ostrzy, przejmują sześć światów na rubieżach, a Senat zwleka z odpowiedzią.',
+    'Rada wysyła na Cytadelę Mrocznego Lorda młodego rycerza. Nad celem jego myśliwiec zostaje trafiony, a ostrze przepada w ciemności…',
+  ],
+};
 const STORY = {
   0: [
-    { who: 'ael', lines: ['Rycerzu, słyszysz mnie? Tu Ael, ostatnia z Rady Ostrza.',
-      'Arcylord gasi nasze świątynie jedną po drugiej.',
-      'Jego uczniowie – Lordowie czerwonych ostrzy – trzymają w strachu sześć światów.'] },
-    { who: 'ael', lines: ['Twój myśliwiec zestrzelono nad Cytadelą. Ostrze przepadło.',
+    { crawl: true },
+    { who: 'ael', lines: ['Rycerzu, słyszysz mnie? Tu mistrzyni Ael z Nowej Rady Zakonu.',
+      'Mistrz Korr i mistrz Oko czuwają nad tobą ze Świątyni na Coruvii.',
+      'Arcylord gasi nasze placówki na rubieżach jedną po drugiej, a Senat Republiki wciąż debatuje.'] },
+    { who: 'ael', lines: ['Twój myśliwiec spadł nad Cytadelą. Ostrze przepadło.',
       'W lochach leży stara rękojeść. Kryształ sam wybierze barwę.',
       'Aura płynie w tobie także bez ostrza – Z i X to twoje pierwsze moce.'] },
     { who: 'ael', lines: ['Każdy świat skrywa kryształ ostrza – szukaj w trudno dostępnych miejscach.',
-      'I pamiętaj: gniew daje siłę szybko, ale zabiera wszystko.'] },
+      'Mistrz Oko kazał ci przekazać: „Gniew daje siłę szybko, ale zabiera wszystko”.'] },
   ],
   1: [
-    { who: 'ael', lines: ['Mroczny Lord upadł. Cytadela znów oddycha.',
-      'Na pustyni Sarrak Pani Burz zbiera najemników – jej sztormy zasypują miasta.',
+    { who: 'ael', lines: ['Mroczny Lord upadł. Cytadela znów oddycha, a Senat w końcu słucha Rady.',
+      'Na pustyni Sarrak Pani Burz zbiera najemników – jej sztormy zasypują osady, o których Republika zapomniała.',
       'Uważaj na ruchome piaski i na strzelców w kanionach.'] },
   ],
   2: [
-    { who: 'ael', lines: ['Burze ucichły, ludzie Sarrak wracają do studni.',
-      'Thalos to stacja na dnie oceanu. Lord Głębin odciął ją od powierzchni.',
+    { who: 'ael', lines: ['Burze ucichły, ludzie Sarrak wracają do studni. Republika obiecuje im pomoc.',
+      'Thalos to stacja na dnie oceanu, która karmi pół sektora. Lord Głębin odciął ją od powierzchni.',
       'Pod wodą pilnuj tlenu – kratki z powietrzem ocalą ci życie.'] },
   ],
   3: [
     { who: 'ael', lines: ['Thalos znów wypuszcza statki. Dziękują ci, choć nie znają twojego imienia.',
-      'Na lodowej Krio Królowa Mrozu więzi ostatnich rycerzy Rady.',
+      'Na lodowej Krio Królowa Mrozu więzi rycerzy, których Rada wysłała przed tobą.',
       'Lód jest śliski – nie biegnij na oślep.'] },
   ],
   4: [
     { who: 'ael', lines: ['Uwolnieni rycerze ruszają ci z pomocą, choć są jeszcze słabi.',
-      'Na leśnym księżycu Verdan poluje Łowca – kiedyś mój uczeń.',
-      'Jeśli możesz, nie odbieraj mu nadziei. Każdy może wrócić do światła.'] },
+      'Na leśnym księżycu Verdan poluje Łowca – kiedyś uczeń mistrza Korra.',
+      'Mistrz Oko wierzy, że każdy może wrócić do światła. Jeśli możesz, nie odbieraj mu nadziei.'] },
   ],
   5: [
-    { who: 'ael', lines: ['To ostatni świat: Ignis, kuźnia floty Arcylorda.',
-      'Będzie cię kusił. Powie, że razem moglibyście rządzić gwiazdami.',
-      'Wybór zawsze należy do ciebie, rycerzu.'] },
+    { who: 'ael', lines: ['To ostatni świat: Ignis, kuźnia floty Arcylorda. Flota Republiki czeka na orbicie na twój znak.',
+      'Arcylord będzie cię kusił. Powie, że Republika jest słaba, a razem moglibyście rządzić gwiazdami.',
+      'Rada ci ufa. Wybór zawsze należy do ciebie, rycerzu.'] },
   ],
   end: [
     { who: 'lord', lines: ['Pokonałeś mnie... ale spójrz na siebie.',
-      'Twoja aura płonie tak jak moja.',
+      'Republika gnije od środka, a Rada tylko się przygląda. Twoja aura płonie tak jak moja.',
       'Przyjmij mój tron, a cała galaktyka będzie twoja.'] },
     { choice: true, lines: ['Arcylord klęczy przed tobą. Co zrobisz?'],
       opts: ['Oszczędź go – zgaś ostrze', 'Przyjmij jego moc i tron'] },
   ],
 };
-const DARK_PAGE = { who: 'ael', lines: ['Czuję w tobie coraz więcej gniewu.',
+const DARK_PAGE = { who: 'ael', lines: ['Czuję w tobie coraz więcej gniewu. Mistrz Oko też to czuje.',
   'Pioruny i uścisk to narzędzia Lordów. Uważaj, kim się stajesz.'] };
 const ENDING = {
-  light: ['Gasisz ostrze. Arcylord, pokonany, oddaje się w ręce Rady.',
-    'Sześć światów jest wolnych. Ael uczy nowych rycerzy – a ty jesteś pierwszym z nich.'],
-  dark: ['Zasiadasz na tronie z popiołu. Floty kłaniają się nowemu władcy.',
-    'Sześć światów jest „wolnych”... a hologram Ael milknie na zawsze.'],
+  light: ['Gasisz ostrze. Arcylord stanie przed sądem Republiki, a sześć światów rubieży znów ma głos w Senacie.',
+    'Mistrz Korr proponuje ci miejsce w Nowej Radzie, a mistrz Oko po raz pierwszy od stu lat się uśmiecha.'],
+  dark: ['Zasiadasz na tronie z popiołu. Floty rubieży kłaniają się nowemu władcy, a Republika drży.',
+    'W Świątyni na Coruvii Rada milknie. Hologram Ael gaśnie na zawsze.'],
 };
+// Napisy otwierające: wiersze w „perspektywie” – im wyżej, tym mniejsze i ciemniejsze
+const CRAWL_SPD = 9, CRAWL_SZ = 8;
+function crawlLines() {
+  if (CRAWL.lines) return CRAWL.lines;
+  const out = [{ s: CRAWL.ep, h: 1 }, { s: CRAWL.title, h: 2 }, { s: '' }];
+  for (const p of CRAWL.paras) { for (const l of wrapTxt(p, 250, CRAWL_SZ)) out.push({ s: l }); out.push({ s: '' }); }
+  return (CRAWL.lines = out);
+}
+const crawlLen = () => crawlLines().length * 12 + 450;
+function drawCrawl(S) {
+  const t = S.t;
+  if (t < 3) {   // wstęp na niebiesko, potem napisy
+    const a = Math.min(1, t / 0.6) * Math.min(1, (3 - t) / 0.6);
+    txt('Dawno temu, wśród odległych gwiazd…', SW / 2, SH / 2 - 4, `rgba(90,170,255,${a})`, 'center', 8);
+    return;
+  }
+  const w0 = (t - 3) * CRAWL_SPD;   // przewinięcie w „metrach” płaszczyzny
+  crawlLines().forEach((L, i) => {
+    if (!L.s) return;
+    const p = w0 - i * 12;   // odległość wiersza od dolnej krawędzi
+    if (p < -10) return;
+    // Rzut płaszczyzny: szerokość liter ~k, wysokość i odstęp wierszy ~k² – jak tekst leżący „w głąb”
+    const k = 1 / (1 + Math.max(0, p) * 0.0052);
+    const y = 26 + 182 * k, a = Math.max(0, Math.min(1, (k - 0.3) * 4));
+    if (a <= 0 || y > SH + 8) return;
+    const sz = (L.h === 2 ? 12 : L.h ? 9 : CRAWL_SZ) * k;
+    TQ.push({ s: L.s, x: SW / 2, y, col: `rgba(255,214,${L.h ? 90 : 60},${a})`, align: 'center', size: sz, sy: k * 1.15 });
+  });
+  // Koniec napisów – czekamy, aż lektor skończy czytać
+  if (w0 > crawlLen() && !(VOICE.on && VOICE.ok() && speechSynthesis.speaking && w0 < crawlLen() + 200)) storyNext();
+}
 
 function showStory(key, then, title) {
   const pages = (STORY[key] || []).slice();
   if (typeof key === 'number' && key >= 2 && (game.dark || 0) >= 10) pages.splice(pages.length, 0, DARK_PAGE);
   if (!pages.length) { then(); return; }
   game.story = { pages, i: 0, t: 0, sel: 0, then, title: title || '' };
+  if (pages[0].crawl && SND.fanfare) SND.fanfare();
+  storySpeak();
   game.mode = 'story';
   for (const k in K) K[k] = false;
 }
 function storyNext() {
   const S = game.story;
   S.i++; S.t = 0; SND.click();
-  if (S.i >= S.pages.length) { game.story = null; S.then(); }
+  if (S.i >= S.pages.length) { game.story = null; VOICE.stop(); S.then(); return; }
+  storySpeak();
 }
 function storyKey(k) {
   const S = game.story;
@@ -328,6 +427,11 @@ function drawStory() {
   for (let i = 0; i < 70; i++) {
     const x = (i * 97.3 + game.anim * (2 + i % 3)) % SW, y = (i * 53.7) % SH;
     ctx.fillStyle = `rgba(200,210,255,${0.25 + (i % 5) * 0.12})`; ctx.fillRect(x, y, 1, 1);
+  }
+  if (pg.crawl) {
+    drawCrawl(S);
+    if (game.story === S) txt('A – dalej · S – pomiń', SW / 2, 192, S.t > 0.35 ? '#5a6078' : '#30343c', 'center', 5.5);
+    return;
   }
   if (S.title) txt(S.title, SW / 2, 16, `rgba(240,192,64,${a})`, 'center', 9);
   const fx = 62, fy = 142;

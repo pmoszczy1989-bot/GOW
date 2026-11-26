@@ -182,6 +182,9 @@ const SND = {
   alarm: () => melody([880, 660, 880, 660], 0.11, 'square', 0.03),
   die: () => melody([392, 330, 262, 196, 0, 131], 0.2, 'square', 0.05),
   lord: () => melody([110, 104, 98, 0, 73], 0.25, 'sawtooth', 0.05),
+  // Fanfara napisów otwierających – autorska, „dęta” (piła + oktawa niżej)
+  fanfare: () => [[196, 0, 0.45], [262, 0.45, 0.28], [294, 0.73, 0.28], [392, 1.01, 1.1], [330, 2.2, 0.26], [349, 2.46, 0.26], [392, 2.72, 0.26], [523, 2.98, 1.8]]
+    .forEach(([f, d, l]) => { tone(f, l, 'sawtooth', 0.035, 0, d); tone(f / 2, l, 'triangle', 0.05, 0, d); }),
   sword: () => melody([392, 523, 659, 0, 523, 659, 784, 1047], 0.13, 'square', 0.05),
   drink: () => melody([523, 587, 659, 784, 880], 0.08, 'triangle', 0.07),
   win: () => melody([523, 659, 784, 1047, 0, 784, 1047, 1319], 0.16, 'square', 0.05),
@@ -216,6 +219,12 @@ if (treeBtn) {
   treeBtn.addEventListener('pointerdown', e => e.stopPropagation());
   treeBtn.addEventListener('click', e => { e.stopPropagation(); audioOn(); if (game.mode !== 'title' && game.mode !== 'gear') openTree(); });
 }
+const voiceBtn = document.getElementById('voiceb');
+if (voiceBtn) {
+  voiceBtn.textContent = VOICE.on ? '🔊' : '🔇';
+  voiceBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  voiceBtn.addEventListener('click', e => { e.stopPropagation(); VOICE.toggle(); });
+}
 const gearBtn = document.getElementById('gearb');
 if (gearBtn) {
   gearBtn.addEventListener('pointerdown', e => e.stopPropagation());
@@ -225,6 +234,7 @@ if (gearBtn) {
 
 window.addEventListener('keydown', e => {
   if (e.key === 'f' || e.key === 'F') { toggleFull(); e.preventDefault(); return; }
+  if ((e.key === 'v' || e.key === 'V') && game.mode !== 'title') { const on = VOICE.toggle(); if (game.mode === 'play') say(on ? 'Głosy włączone' : 'Głosy wyłączone', 1.5); e.preventDefault(); return; }
   if (game.mode === 'title') { if (!e.repeat) titleKey(e); e.preventDefault(); return; }
   const k = keyOf(e);
   if (game.mode === 'story') { if (!e.repeat) storyKey(e.key === 'Enter' || e.key === ' ' ? 'act' : e.key === 'Escape' ? 'sheathe' : k); e.preventDefault(); return; }
@@ -435,7 +445,7 @@ function treeTap(e) {
 }
 const treeBox = (ci, ni) => ({ x: 8 + ci * 104, y: 30 + ni * 30, w: 96, h: 26 });
 
-function say(text, sec) { msg = { text, t: sec || 3 }; }
+function say(text, sec) { msg = { text, t: sec || 3 }; VOICE.hint(text); }
 
 // Trudność rośnie z każdym poziomem (0 – pierwszy, 1 – ostatni)
 const diff = () => lvl / (LEVELS.length - 1);
@@ -528,6 +538,7 @@ function loadLevel(i) {
 }
 
 function newGame() {
+  game.vEnd = false;
   game.maxHp = 3; game.time = 0; game.crys = 0; game.dark = 0; game.path = ''; game.blade = BLADES[0]; game.lp = undefined;
   skReset(); lsSet(SAVE_KEY, null); loadLevel(0);
   if (game.live) showStory(0, () => { game.mode = 'play'; }, LEVELS[0].chapter);
@@ -4129,6 +4140,10 @@ function drawText() {
   for (const q of TQ) {
     tctx.font = `bold ${q.size}px "Segoe UI", Tahoma, Verdana, sans-serif`;
     tctx.textAlign = q.align;
+    if (q.sy) {   // tekst spłaszczony w pionie (perspektywa napisów otwierających)
+      tctx.save(); tctx.translate(q.x, q.y); tctx.scale(1, q.sy);
+      tctx.fillStyle = q.col; tctx.fillText(q.s, 0, 0); tctx.restore(); continue;
+    }
     if (q.sh) { tctx.fillStyle = 'rgba(0,0,0,0.85)'; tctx.fillText(q.s, q.x + 0.6, q.y + 0.6); }
     tctx.fillStyle = q.col; tctx.fillText(q.s, q.x, q.y);
   }
@@ -4316,6 +4331,7 @@ function drawWin() {
     const m = Math.floor(game.time / 60), sec = Math.floor(game.time % 60);
     txt('SAGA UKOŃCZONA', SW / 2, 52, game.path === 'dark' ? '#ff6050' : '#f0c040', 'center', 14);
     const E = ENDING[game.path === 'dark' ? 'dark' : 'light'];
+    if (!game.vEnd) { game.vEnd = true; VOICE.say('Saga ukończona. ' + E.join(' '), 'nar'); }
     let y = 70;
     for (const s of E) for (const l of wrapTxt(s, 280, 7)) { txt(l, SW / 2, y, '#e8d8b0', 'center', 7); y += 10; }
     txt('Czas: ' + m + ':' + String(sec).padStart(2, '0') + '   Życie: ' + P.hp + '/' + P.max + '   Kryształy: ' + game.crys, SW / 2, y + 8, '#e8d8b0');
