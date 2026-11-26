@@ -1,4 +1,4 @@
-# GOW – Rycerze Ostrza
+# GOW – Rycerze Mistrzów
 
 Platformówka inspirowana klasycznym **Prince of Persia (1989)**, osadzona w realiach kosmicznej opowieści
 o rycerzach z ostrzami energii. Spadasz z nieba na dach cytadeli, odnajdujesz rękojeść ostrza
