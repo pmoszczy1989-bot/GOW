@@ -128,7 +128,7 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
   srebrne (dłuższy zasięg), turkusowe (dwa ostrza, +1 kombo), różane (+1 kryształ za wroga),
   złote (szansa na podwójne obrażenia), pryzmatyczne (zmienia kolor, tańsze moce).
 - **Osiągnięcia** (17) – wyskakują jako komunikat u góry ekranu, lista w kolekcji.
-- **Fabuła** (świat autorski): 200 lat po śmierci Liry Sol, wnuczki Imperatora, odrodzony Zakon Rycerzy Ostrza
+- **Fabuła** (świat autorski): 200 lat po śmierci Liry Sol, wnuczki Imperatora, odrodzony Zakon Mistrzów
   strzeże młodej Republiki po upadku Imperium i Żelaznego Ładu. W Nowej Radzie zasiadają mistrz Davan Korr
   (prawnuk legendarnego mistrza Korra) i sędziwy mistrz Oko. Nowa gra zaczyna się przewijanymi napisami
   w perspektywie z fanfarą (`CRAWL`, `drawCrawl`; A – dalej, S – pomiń), potem przekazy holograficzne Ael przed każdym rozdziałem.

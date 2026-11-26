@@ -266,11 +266,11 @@ function storySpeak() {
 }
 
 // ===== Fabuła: napisy otwierające (przewijane w perspektywie) i holowiadomości mistrzyni Ael =====
-// Świat autorski: 200 lat po śmierci Liry Sol odrodzony Zakon Rycerzy Ostrza pilnuje młodej Republiki
+// Świat autorski: 200 lat po śmierci Liry Sol odrodzony Zakon Mistrzów pilnuje młodej Republiki
 const CRAWL = {
   ep: 'ROZDZIAŁ I', title: 'CIEŃ NA RUBIEŻACH',
   paras: [
-    'Minęło dwieście lat od śmierci Liry Sol, wnuczki Imperatora, która zwróciła się przeciw własnej krwi, zgasiła mrok i odbudowała Zakon Rycerzy Ostrza.',
+    'Minęło dwieście lat od śmierci Liry Sol, wnuczki Imperatora, która zwróciła się przeciw własnej krwi, zgasiła mrok i odbudowała Zakon Mistrzów.',
     'Po upadku Imperium i jego następcy, Żelaznego Ładu, odrodzona Republika rośnie szybciej, niż potrafi się bronić. Senat spiera się o szlaki handlowe, a światy dalekich rubieży czują się zapomniane.',
     'W Nowej Radzie Zakonu zasiadają mistrz Davan Korr, prawnuk legendarnego mistrza Korra, oraz sędziwy mistrz Oko – maleńki strażnik, który pamięta jeszcze czasy Imperium.',
     'Z ruin dawnych twierdz powstał tajemniczy ARCYLORD. Jego uczniowie, Lordowie czerwonych ostrzy, przejmują sześć światów na rubieżach, a Senat zwleka z odpowiedzią.',
