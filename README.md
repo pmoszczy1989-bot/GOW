@@ -141,6 +141,9 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
   na tym poziomie, `ngp` – cykl Nowej gry+, `ship` – ulepszenia myśliwca). Menu tytułowe: *Kontynuuj*,
   *Nowa gra* (N), wybór odblokowanego rozdziału (1–6). Postęp trwały – osiągnięcia, ostrza, rekordy – w `gow_meta`
   (`lv` gwiazdki i czasy, `codex`, `outfit`, `wins`, `ngc`, `rush`).
+- **Gracze**: przy pierwszym uruchomieniu wpisujesz imię gracza; na ekranie tytułowym wybierasz gracza (przycisk lub ↑↓),
+  dodajesz nowego (*+ Nowy*) albo usuwasz bieżącego (✕). Lista w `gow_players` (`list`, `cur`), każdy gracz ma własne
+  `gow_save:<imię>` i `gow_meta:<imię>`; stary zapis bez profilu przejmuje pierwszy utworzony gracz.
 - **Kryształy po śmierci**: kryształy `O` zebrane na poziomie nie pojawiają się ponownie po śmierci ani po wczytaniu zapisu (zostają policzone).
 - **Gwiazdki** (☆, maks. 3 na poziom, 105 łącznie): ukończenie, bez rany, czas w normie (`parT`); w lotach: ≤2 trafienia i bez trafienia.
   Najlepsze czasy i gwiazdki w zakładce Rekordy encyklopedii.

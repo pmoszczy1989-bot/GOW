@@ -9,15 +9,51 @@
 //   gow_voice – false = głosy lektora wyłączone
 //   gow_meta – trwałe postępy: best (najdalszy poziom), achv {id: data}, blades [id], lords [imiona],
 //     lv {poziom: {s: gwiazdki, t: rekord czasu}}, codex [klucze], outfit, wins, ngc (przeniesienie do NG+), rush {n, t}
+//   gow_players – profile graczy: list [imiona], cur (wybrany gracz). Każdy gracz ma własne
+//     gow_save:<imię> i gow_meta:<imię>; stare gow_save / gow_meta przejmuje pierwszy utworzony gracz.
 
-const SAVE_KEY = 'gow_save', META_KEY = 'gow_meta';
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
 function lsSet(k, v) {
   try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
 }
-const META = Object.assign({ best: 0, achv: {}, blades: [], lords: [], lv: {}, codex: [], outfit: 'std', wins: 0, ngc: null, rush: null },
-  lsGet(META_KEY) || {});
+
+// ===== Profile graczy =====
+const PLAYERS_KEY = 'gow_players';
+const PL = Object.assign({ list: [], cur: '' }, lsGet(PLAYERS_KEY) || {});
+if (!PL.list.includes(PL.cur)) PL.cur = PL.list[0] || '';
+let SAVE_KEY = 'gow_save', META_KEY = 'gow_meta';
+const META = {};
 const saveMeta = () => lsSet(META_KEY, META);
+function loadPlayer() {
+  SAVE_KEY = PL.cur ? 'gow_save:' + PL.cur : 'gow_save'; META_KEY = PL.cur ? 'gow_meta:' + PL.cur : 'gow_meta';
+  for (const k in META) delete META[k];
+  Object.assign(META, { best: 0, achv: {}, blades: [], lords: [], lv: {}, codex: [], outfit: 'std', wins: 0, ngc: null, rush: null },
+    lsGet(META_KEY) || {});
+}
+loadPlayer();
+const savePlayers = () => lsSet(PLAYERS_KEY, PL);
+function pickPlayer(n) { if (PL.list.includes(n)) { PL.cur = n; savePlayers(); loadPlayer(); } }
+// Zwraca komunikat błędu albo '' po dodaniu gracza
+function addPlayer(raw) {
+  const n = String(raw || '').replace(/\s+/g, ' ').trim().slice(0, 16);
+  if (!n) return 'Wpisz imię gracza';
+  if (PL.list.some(x => x.toLowerCase() === n.toLowerCase())) return 'Taki gracz już jest';
+  if (!PL.list.length) {                    // stary zapis sprzed profili trafia do pierwszego gracza
+    const os = lsGet('gow_save'), om = lsGet('gow_meta');
+    if (os) lsSet('gow_save:' + n, os);
+    if (om) lsSet('gow_meta:' + n, om);
+    lsSet('gow_save', null); lsSet('gow_meta', null);
+  }
+  PL.list.push(n); PL.cur = n; savePlayers(); loadPlayer();
+  return '';
+}
+function delPlayer(n) {
+  PL.list = PL.list.filter(x => x !== n);
+  lsSet('gow_save:' + n, null); lsSet('gow_meta:' + n, null);
+  if (PL.cur === n) PL.cur = PL.list[0] || '';
+  savePlayers(); loadPlayer();
+}
+const escH = t => String(t).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
 
 // ===== Zapis biegu =====
 function saveRun() {
@@ -478,12 +514,37 @@ function drawStory() {
   }
 }
 
-// ===== Ekran tytułowy: Kontynuuj / Nowa gra / wybór rozdziału =====
+// ===== Ekran tytułowy: gracz / Kontynuuj / Nowa gra / wybór rozdziału =====
+let menuAdd = false, menuErr = '';
 function buildMenu() {
   const el = document.getElementById('menu');
   if (!el) return;
+  if (menuAdd || !PL.cur) {
+    el.innerHTML = `<div class="who">${PL.list.length ? 'Nowy gracz' : 'Witaj! Jak masz na imię?'}</div>` +
+      `<div class="who"><input id="pname" maxlength="16" placeholder="imię gracza" autocomplete="off">` +
+      `<button data-m="add" class="main">OK <kbd>Enter</kbd></button>${PL.list.length ? '<button data-m="back">Anuluj <kbd>Esc</kbd></button>' : ''}</div>` +
+      (menuErr ? `<div class="err">${escH(menuErr)}</div>` : '');
+    const inp = el.querySelector('#pname');
+    const ok = () => { menuErr = addPlayer(inp.value); if (!menuErr) menuAdd = false; buildMenu(); };
+    inp.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); ok(); }
+      else if (e.key === 'Escape' && PL.list.length) { menuAdd = false; menuErr = ''; buildMenu(); }
+    });
+    el.querySelectorAll('button').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (b.dataset.m === 'add') ok(); else { menuAdd = false; menuErr = ''; buildMenu(); }
+    }));
+    setTimeout(() => inp.focus(), 0);
+    return;
+  }
   const s = runSave(), best = META.best || 0, n = ACHV.filter(a => META.achv[a[0]]).length;
-  let h = '';
+  let h = '<div class="who">Gracz: ' + PL.list.map(p => {
+    const ps = p === PL.cur ? s : lsGet('gow_save:' + p);
+    return `<button data-m="pl" data-n="${escH(p)}"${p === PL.cur ? ' class="cur"' : ''} title="${ps && LEVELS[ps.lvl] ? 'Poziom ' + (ps.lvl + 1) : 'Bez zapisu'}">${escH(p)}</button>`;
+  }).join('') + '<button data-m="addp" title="Dodaj gracza">+ Nowy</button>' +
+    `<button data-m="del" title="Usuń gracza ${escH(PL.cur)}">✕</button>` +
+    (PL.list.length > 1 ? ' <small>(↑↓ zmiana)</small>' : '') + '</div>';
   if (s) h += `<button data-m="cont" class="main">▶ Kontynuuj – poziom ${s.lvl + 1}: ${LEVELS[s.lvl].name} <kbd>Enter</kbd></button>`;
   h += `<button data-m="new"${s ? '' : ' class="main"'}>Nowa gra <kbd>${s ? 'N' : 'Enter'}</kbd></button>`;
   if (META.ngc) h += `<button data-m="ngp" title="Zachowujesz umiejętności, kryształy, ostrze i ulepszenia myśliwca; wrogowie są silniejsi">Nowa gra+ (cykl ${META.ngc.ngp}) <kbd>P</kbd></button>`;
@@ -499,11 +560,19 @@ function buildMenu() {
   el.querySelectorAll('button').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     const m = b.dataset.m;
+    if (m === 'pl') { pickPlayer(b.dataset.n); buildMenu(); return; }
+    if (m === 'addp') { menuAdd = true; menuErr = ''; buildMenu(); return; }
+    if (m === 'del') { if (confirm('Usunąć gracza ' + PL.cur + ' i wszystkie jego postępy?')) { delPlayer(PL.cur); buildMenu(); } return; }
     if (m === 'cont') contGame(); else if (m === 'new') beginGame(); else if (m === 'ngp') ngGame(); else if (m === 'rush') rushGame();
     else chapGame(+b.dataset.i);
   }));
 }
 function titleKey(e) {
+  if (!PL.cur || menuAdd) { const i = document.getElementById('pname'); if (i) i.focus(); return; }
+  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && PL.list.length > 1) {
+    const i = PL.list.indexOf(PL.cur), d = e.key === 'ArrowUp' ? -1 : 1;
+    pickPlayer(PL.list[(i + d + PL.list.length) % PL.list.length]); buildMenu(); return;
+  }
   if (e.key === 'n' || e.key === 'N') { beginGame(); return; }
   if ((e.key === 'p' || e.key === 'P') && META.ngc) { ngGame(); return; }
   if ((e.key === 'b' || e.key === 'B') && rushList().length && META.lords.length) { rushGame(); return; }
@@ -523,7 +592,7 @@ function contGame() {
   // Kryształy zebrane przed zapisem na tym poziomie nie pojawią się ponownie
   game.got = (s.got || []).slice(); game.crysLvl = s.crys; game.crys = s.crys + game.got.length; game.retry = true;
   loadLevel(s.lvl);
-  say('Wczytano zapis – poziom ' + (s.lvl + 1) + ': ' + LV.name, 2.5);
+  say('Witaj, ' + PL.cur + '! Poziom ' + (s.lvl + 1) + ': ' + LV.name, 2.5);
 }
 function chapGame(i) {
   leaveTitle();

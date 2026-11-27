@@ -238,6 +238,7 @@ if (codexBtn) {
 ['fullscreenchange', 'webkitfullscreenchange'].forEach(n => document.addEventListener(n, () => setTimeout(fit, 50)));
 
 window.addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') return;   // wpisywanie imienia gracza
   if (e.key === 'f' || e.key === 'F') { toggleFull(); e.preventDefault(); return; }
   if ((e.key === 'v' || e.key === 'V') && game.mode !== 'title') { const on = VOICE.toggle(); if (game.mode === 'play') say(on ? 'Głosy włączone' : 'Głosy wyłączone', 1.5); e.preventDefault(); return; }
   if (game.mode === 'title') { if (!e.repeat) titleKey(e); e.preventDefault(); return; }
@@ -257,7 +258,7 @@ window.addEventListener('keyup', e => { const k = keyOf(e); if (k) release(k); }
 window.addEventListener('blur', () => { for (const k in K) K[k] = false; });
 
 const titleEl = document.getElementById('title');
-titleEl.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; e.preventDefault(); start(); });
+titleEl.addEventListener('pointerdown', e => { if (e.target.closest('button, input')) return; e.preventDefault(); start(); });
 // Wykrywanie telefonu / tabletu: dotyk + gruby wskaźnik albo brak myszy
 const TOUCH = ('ontouchstart' in window || navigator.maxTouchPoints > 0) &&
   (!window.matchMedia || matchMedia('(pointer:coarse)').matches || !matchMedia('(hover:hover)').matches);
@@ -583,7 +584,10 @@ function restart() {
   loadLevel(lvl);
 }
 // Enter / dotknięcie na ekranie tytułowym: kontynuuj zapis albo zacznij od nowa
-function start() { if (runSave()) contGame(); else beginGame(); }
+function start() {
+  if (!PL.cur || menuAdd) { const i = document.getElementById('pname'); if (i) i.focus(); return; }
+  if (runSave()) contGame(); else beginGame();
+}
 function toTitle() { game.live = false; game.mode = 'title'; buildMenu(); titleEl.classList.remove('hide'); }
 function finishLevel() {
   if (!game.hurtLvl) achv(LV.ship ? 'pilot' : 'clean');
