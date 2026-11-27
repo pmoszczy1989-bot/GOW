@@ -285,16 +285,19 @@ document.querySelectorAll('#touch button[data-k]').forEach(b => {
   b.addEventListener('lostpointercapture', off);
   b.addEventListener('contextmenu', e => e.preventDefault());
 });
-// Gałka (lewy dolny róg) – kierunki jak strzałki; mocne wychylenie w bok = bieg, lekkie = ostrożny krok
+// Pływająca gałka: dotknięcie w dowolnym miejscu ekranu (poza przyciskami) ustawia jej środek, przesunięcie palca = kierunek.
+// Mocne przesunięcie w bok = bieg, lekkie = ostrożny krok; w górę = skok, w dół = kucnięcie / zwis.
 const stick = document.getElementById('stick'), knob = document.getElementById('knob');
 if (stick) {
-  let sid = null;
+  let sid = null, ox = 0, oy = 0;
   const DIRS = ['left', 'right', 'up', 'down'];
   const setDir = (k, v) => { if (v && !K[k]) press(k); else if (!v && K[k]) release(k); };
   const move = e => {
-    const r = stick.getBoundingClientRect(), R = r.width / 2;
-    let dx = (e.clientX - r.left - R) / R, dy = (e.clientY - r.top - R) / R;
+    const R = stick.offsetWidth / 2 || 60;
+    let dx = (e.clientX - ox) / R, dy = (e.clientY - oy) / R;
     const d = Math.hypot(dx, dy);
+    // Palec odjechał daleko – gałka podąża za nim (zmiana kierunku bez odrywania palca)
+    if (d > 1.4) { ox = e.clientX - dx / d * 1.4 * R; oy = e.clientY - dy / d * 1.4 * R; stick.style.left = ox + 'px'; stick.style.top = oy + 'px'; }
     if (d > 1) { dx /= d; dy /= d; }
     knob.style.transform = `translate(${dx * R * 0.55}px, ${dy * R * 0.55}px)`;
     const ax = Math.abs(dx), ay = Math.abs(dy);
@@ -309,17 +312,20 @@ if (stick) {
     sid = null; knob.style.transform = ''; stick.classList.remove('on');
     DIRS.forEach(k => setDir(k, false)); setDir('walk', false);
   };
-  stick.addEventListener('pointerdown', e => {
+  document.addEventListener('pointerdown', e => {
+    if (!document.body.classList.contains('touch') || sid !== null || game.mode !== 'play' || e.pointerType === 'mouse') return;
+    if (e.target.closest('button, #title, #menu, a, input')) return;
+    if (P && P.st === 'dead') return;
     e.preventDefault(); audioOn();
-    if (game.mode === 'title') { start(); return; }
-    sid = e.pointerId; stick.classList.add('on');
-    try { stick.setPointerCapture(sid); } catch (er) {}
+    sid = e.pointerId; ox = e.clientX; oy = e.clientY;
+    stick.style.left = ox + 'px'; stick.style.top = oy + 'px'; stick.classList.add('on');
     move(e);
-  });
-  stick.addEventListener('pointermove', e => { if (e.pointerId === sid) { e.preventDefault(); move(e); } });
-  stick.addEventListener('pointerup', end);
-  stick.addEventListener('pointercancel', end);
-  stick.addEventListener('lostpointercapture', end);
+  }, { passive: false });
+  window.addEventListener('pointermove', e => { if (e.pointerId === sid) { e.preventDefault(); move(e); } }, { passive: false });
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  // Zmiana trybu (drzewko, encyklopedia, śmierć) – puszczenie gałki
+  setInterval(() => { if (sid !== null && game.mode !== 'play') end({ pointerId: sid }); }, 200);
 }
 // Dotknięcie ekranu gry po śmierci / zwycięstwie; w drzewku – wybór węzła
 cv.addEventListener('pointerdown', e => {
@@ -674,8 +680,8 @@ function air(o, dt) {
         o.y = fy; o.r = r; o.air = false; o.vy = 0;
         return r;
       }
-      // Gracz tuż za krawędzią podłogi / platformy (do 10 px) – ląduje na jej brzegu zamiast przelecieć
-      if (o === P && py <= fy && o.y >= fy) {
+      // Skok tuż za krawędź podłogi / platformy (do 10 px) – lądowanie na jej brzegu zamiast przelotu
+      if (o === P && P.st === 'jump' && py <= fy && o.y >= fy) {   // tylko skok – zejście z krawędzi ma spaść
         const d = -(Math.sign(o.vx) || o.dir || 1);
         for (let k = 3; k <= 10; k += 3.5) {
           const nx = o.x + d * k;
