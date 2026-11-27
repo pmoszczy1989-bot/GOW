@@ -100,7 +100,9 @@ Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0
 - **Skradanie**: wróg, który cię nie zauważył (śpi albo stoi tyłem), pada od jednego **cichego ciosu** (A).
   Bieg i lądowanie słychać z bliska – podchodź krokiem (Shift).
 - **Zagadki aury**: blok `X` przesuwasz odepchnięciem (pchnij) i przyciągnięciem (do siebie); wepchnięty w szczelinę
-  tworzy most, postawiony na płycie `P` trzyma kratę otwartą. Dźwignię `Y` przestawisz klawiszem A albo przyciągnięciem z daleka.
+  tworzy most, postawiony na płycie `P` trzyma kratę otwartą. Blok jest też kruchą ścianą: rozbijesz go dwoma cięciami
+  ostrza (A) albo pchnięciem aury, gdy nie ma gdzie się przesunąć (blok-most w szczelinie jest nie do ruszenia); gdy w komnacie
+  z płytą nie zostanie żaden blok, krata zostaje otwarta. Dźwignię `Y` przestawisz klawiszem A albo przyciągnięciem z daleka.
 - **Droid BIP** (od rozdziału II) leci za tobą, co kilka sekund razi pobliskiego wroga i wskazuje ukryty kryształ ostrza w komnacie.
 - Lord paruje i odskakuje. Pierwszy ma 5 żyć, każdy kolejny o 1 więcej (do 10). Pierwszy walczy sam, bez przeszkadzajek.
   **Fazy** dochodzą z kolejnymi planetami: od 2. Lorda (przy 70% życia) rzut wirującym ostrzem, które wraca do ręki

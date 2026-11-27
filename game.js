@@ -1014,7 +1014,7 @@ function moveBlock(b, s) {
     return true;
   }
   if (r > r0) {
-    b.r = r; b.oy = -(r - r0) * RH;
+    b.r = r; b.oy = -(r - r0) * RH; b.fell = true;
     MAP[r - 1][c2] = '_';   // wierzch bloku staje się podłogą rzędu wyżej
     delete spikes[r + ',' + c2];
     SND.crash(); shake(3); burst(c2 * TW + 16, floorY(r), 14, '#8a8a9a', 90, 50);
@@ -1022,6 +1022,28 @@ function moveBlock(b, s) {
   } else { SND.thud(); shake(1); }
   if (cell(b.r, c2) === 'P') { SND.click(); say('Blok dociska płytę – krata stoi otworem.', 2); }
   return true;
+}
+// Blok aury jest też kruchą ścianą: rozbijesz go 2 cięciami ostrza albo pchnięciem aury, gdy nie ma gdzie się przesunąć.
+// Blok, który wpadł w szczelinę (most), jest już nie do ruszenia.
+function blockHitAhead() {
+  if (P.st === 'swim') return null;
+  return BLOCKS.find(b => !b.fell && b.r === P.r && (b.c * TW + 16 - P.x) * P.dir > 0 && (b.c * TW + 16 - P.x) * P.dir < 46) || null;
+}
+function hitBlock(b, dmg) {
+  b.hp = (b.hp == null ? 2 : b.hp) - dmg;
+  const x = b.c * TW + 16, fy = floorY(b.r);
+  sparks(x - P.dir * 14, fy - 16, game.blade ? game.blade.col : '#c0d0ff', 6);
+  if (b.hp > 0) { SND.thud(); shake(2); game.stop = 0.04; say('Blok pęka – jeszcze jeden cios!', 1.5); return; }
+  BLOCKS.splice(BLOCKS.indexOf(b), 1);
+  SND.crash(); shake(4); game.stop = 0.06;
+  burst(x, fy - 16, 16, '#8a92a8', 110, 70);
+  for (let i = 0; i < 7; i++) {
+    debris(x + (Math.random() - 0.5) * 20, fy - 6 - Math.random() * 22, b.r, (Math.random() - 0.5) * 160 + P.dir * 60,
+      -90 - Math.random() * 100, 3 + Math.random() * 5, i % 2 ? '#4a505e' : '#6a7284', i < 3 ? 0.4 : 0);
+  }
+  // Zagadka z płytą bez bloku – krata zostaje otwarta, żeby nie utknąć
+  if (!BLOCKS.length && MAP.some(row => row.includes('P')) && MAP.some(row => row.includes('G'))) lever = true;
+  say('Blok rozbity – przejście wolne!', 2);
 }
 function updBlocks(dt) {
   for (const b of BLOCKS) {
@@ -1309,7 +1331,8 @@ function auraPush() {
   }
   for (const m of MINES) if (m.alive && Math.hypot(m.x - P.x, m.y - by) < pushRange() - 10 && (m.x - P.x) * d > -10) { mineBoom(m, false); n++; }
   const bk = blockAhead(d);
-  if (bk && moveBlock(bk.b, d)) { n++; burst(bk.b.c * TW + 16 - d * 14, floorY(bk.b.r) - 30, 8, '#c0d0ff', 50, 30, true); }
+  if (bk && !bk.b.fell && bk.i === 1 && !moveBlock(bk.b, d)) { hitBlock(bk.b, 2); n++; }
+  else if (bk && moveBlock(bk.b, d)) { n++; burst(bk.b.c * TW + 16 - d * 14, floorY(bk.b.r) - 30, 8, '#c0d0ff', 50, 30, true); }
   if (P.st !== 'swim') for (let c = 0; c < COLS; c++) {
     if (cell(P.r, c) !== 'B') continue;
     const dx = (c * TW + 16 - P.x) * d;
@@ -2070,7 +2093,7 @@ function resolveStrike() {
     const d = Math.abs(f.x - P.x);
     if (d < bd) { bd = d; t = f; }
   }
-  if (!t) { const c = crateAhead(); if (c >= 0) breakCrate(c); return; }
+  if (!t) { const bk = blockHitAhead(); if (bk) { hitBlock(bk, 1); return; } const c = crateAhead(); if (c >= 0) breakCrate(c); return; }
   // Cichy cios: nieświadomy strażnik zaskoczony od tyłu (śpiący – z każdej strony) pada od razu
   if (t.k !== 'lord' && !t.aw && (t.st === 'sleep' || (t.st === 'idle' && Math.sign(t.x - P.x) === t.dir))) {
     game.cause = 'stealth'; game.stealth++;
@@ -3945,6 +3968,11 @@ function drawDynamic() {
     ctx.fillStyle = `rgba(140,200,255,${k})`;
     ctx.fillRect(x + 14, y0 + h / 2 - 6, 4, 12); ctx.fillRect(x + 10, y0 + h / 2 - 2, 12, 4);
     EQ.push({ x: x + 16, y: y0 + h / 2, col: '#80c0ff', r: 12, a: 0.25 * k, rgb: '120,190,255' });
+    if (b.hp === 1) {                                   // pęknięty po pierwszym cięciu
+      ctx.fillStyle = '#1e2028';
+      [[6, 4, 2, 6], [7, 9, 3, 2], [9, 11, 2, 7], [22, 6, 2, 5], [20, 10, 3, 2], [19, 12, 2, 9], [12, 20, 6, 1]]
+        .forEach(([dx, dy, w, hh]) => ctx.fillRect(x + dx, y0 + dy, w, hh));
+    }
   }
   // Odłamki stropu (faza 3 Lorda): cień na podłodze i spadający głaz
   for (const f of FOES) {
@@ -4220,12 +4248,14 @@ function hint() {
     const pi = game.slots.indexOf('pull'), qi = game.slots.indexOf('push');
     const bA = blockAhead(p.dir);
     if (bA && (qi >= 0 || (pi >= 0 && bA.i >= 2)))
-      return 'Blok aury: ' + (qi >= 0 ? 'ZX'[qi] + ' – pchnij' : '') + (qi >= 0 && pi >= 0 && bA.i >= 2 ? ' · ' : '') + (pi >= 0 && bA.i >= 2 ? 'ZX'[pi] + ' – przyciągnij' : '');
+      return 'Blok aury: ' + (qi >= 0 ? 'ZX'[qi] + ' – pchnij' : '') + (qi >= 0 && pi >= 0 && bA.i >= 2 ? ' · ' : '') + (pi >= 0 && bA.i >= 2 ? 'ZX'[pi] + ' – przyciągnij' : '') +
+        (p.sword && blockHitAhead() ? ' · A – rozbij' : '');
   }
   if (p.sword && FOES.some(f => f.alive && !f.aw && f.k !== 'lord' && !isDrone(f) && f.r === p.r && (f.st === 'sleep' || (f.st === 'idle' && Math.sign(f.x - p.x) === f.dir)) && Math.abs(f.x - p.x) < 60))
     return 'Podkradnij się – A cichy cios od tyłu (nie biegnij!)';
   if (atDoor()) return doorOpen() ? '↑ – wyjdź przez wrota' : 'Pokonaj Lorda, by zgasić pole siłowe';
   if (crateAhead() >= 0) return p.sword ? 'A – rozbij skrzynię' : 'Skrzynię rozetnie tylko ostrze';
+  if (blockHitAhead()) return p.sword ? 'A A – rozbij blok' : 'Blok: wyciągnij ostrze (A) i rozbij go albo pchnij aurą';
   if (!p.air && wideGap()) return 'Szeroka przepaść – C mega skok (aura ' + MEGA_COST + ')' + (p.aura < MEGA_COST ? ' – za mało aury!' : '');
   if (!p.sword) return '←→ bieg · ↑ skok · ↓ zwis · Z/X aura (moc działa i bez ostrza)';
   if (gate >= 0.8 && gateT <= 0 && !used) return 'Krata się zamyka – biegnij!';
