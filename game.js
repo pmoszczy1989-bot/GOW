@@ -2234,6 +2234,8 @@ function updFoe(f, dt) {
   f.mv = Math.max(0, f.mv - dt);
   if (f.mark && (f.mark.t -= dt) <= 0) f.mark = null;
   if (f.st === 'pulled') return;
+  // Przerwany uścisk/QTE (cios, odepchnięcie, piorun…) – wróg opada na ziemię zamiast wisieć w powietrzu
+  if (f.st !== 'choke' && f.lift && !(game.qte && game.qte.f === f)) f.lift = Math.max(0, f.lift - dt * 80);
   if (f.st === 'choke') {
     // Uścisk: unoszenie, szamotanina, po chwili obrażenia i upadek
     f.lift = Math.min(14, f.t * 30) + Math.sin(f.t * 30) * (f.t > 0.4 ? 1 : 0);
