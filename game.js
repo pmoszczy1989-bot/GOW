@@ -497,7 +497,27 @@ function mkFoe(f) {
 }
 
 // Komnata: mapa + własni przeciwnicy, luźne płyty, kolce, lampy, platformy i miny
-function mkRoom(R) {
+// Posiłki: w komnatach z żołnierzami pojawia się dodatkowy (od rozdziału II – czasem dwóch), w stylu załogi komnaty
+function reinforce(R, ri0) {
+  const fs = (R.foes || []).slice();
+  if (lvl < 1 || LV.ship || fs.some(f => f.k === 'lord')) return fs;
+  const tr = fs.filter(f => ['blaster', 'rifle', 'shield', 'sniper'].includes(f.k));
+  if (!tr.length) return fs;
+  const wl = R.wl == null ? 999 : R.wl, st = LV.start || {};
+  const ok = (r, c) => R.map[r][c] === '_' && floorY(r) - 20 < wl && (R.map[r][c - 1] === '_' || R.map[r][c + 1] === '_') &&
+    !fs.some(f => f.r === r && Math.abs(f.c - c) < 3) && !((st.room || 0) === ri0 && st.r === r && Math.abs(st.c - c) < 4);
+  const n = 1 + (tr.length >= 2 && lvl >= 6 ? 1 : 0);
+  for (let k = 0; k < n; k++) {
+    const cand = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 2; c <= 7; c++) if (ok(r, c)) cand.push({ r, c });
+    if (!cand.length) break;
+    const q = cand[(lvl * 31 + ri0 * 7 + k * 13) % cand.length], src = tr[(ri0 + k) % tr.length];
+    fs.push({ k: (lvl + ri0 + k) % 3 === 0 ? 'rifle' : 'blaster', r: q.r, c: q.c, dir: q.c < 5 ? 1 : -1, sty: src.sty });
+  }
+  return fs;
+}
+
+function mkRoom(R, ri0) {
   const D = Object.assign({ theme: LV.theme, sky: LV.sky, lore: LV.lore, wl: 999 }, R);
   const map = R.map.map(s => s.split(''));
   const loose = [], sp = {}, lm = [], mines = [], blocks = [];
@@ -515,7 +535,7 @@ function mkRoom(R) {
     }
   }
   const plats = (R.plats || []).map(q => ({ r: q.r, x0: q.c0 * TW + 16, x1: q.c1 * TW + 16, x: q.c0 * TW + 16, v: q.sp * HARD, w: 26, dx: 0 }));
-  return { D, map, foes: (R.foes || []).map(mkFoe), loose, spikes: sp, lamps: lm, plats, mines, blocks };
+  return { D, map, foes: reinforce(R, ri0 || 0).map(mkFoe), loose, spikes: sp, lamps: lm, plats, mines, blocks };
 }
 
 function enterRoom(k) {
@@ -523,7 +543,7 @@ function enterRoom(k) {
   RD = R.D; MAP = R.map; FOES = R.foes; LOOSE = R.loose; spikes = R.spikes; lamps = R.lamps;
   PLATS = R.plats; MINES = R.mines; BLOCKS = R.blocks;
   if (game.bot) { game.bot.told = false; game.bot.x = P ? P.x : game.bot.x; }
-  BOLTS = []; parts = []; DEBRIS = []; WAVES = [];
+  BOLTS = []; parts = []; DEBRIS = []; WAVES = []; game.al = null;
   const key = lvl + ':' + k;
   if (!BGS[key]) BGS[key] = buildBG(RD);
   codexSee();
@@ -1160,7 +1180,7 @@ const RACE = {
   mantis: { name: 'Modliszak z Verdanu', melee: 'pazur', cloak: true, sp: 2.2, dodge: 0.6 },
   magma: { name: 'Magmowiec z Ignis', fire: true, hp: 1, nododge: true },
 };
-const pullable = f => f.alive && !['fin', 'fdead', 'ffall', 'gone', 'pulled', 'meditate', 'rise', 'choke'].includes(f.st);
+const pullable = f => f.alive && !f.air && !['fin', 'fdead', 'ffall', 'gone', 'pulled', 'meditate', 'rise', 'choke'].includes(f.st);
 const PNAME = { pull: 'Przyciąganie', push: 'Odepchnięcie', shield: 'Tarcza', trick: 'Omamienie', heal: 'Uzdrowienie',
   throw: 'Rzut ostrzem', choke: 'Uścisk', bolt: 'Pioruny' };
 const pullRange = () => [80, 80, 110, 140, 170][skl('pull')];
@@ -2219,6 +2239,105 @@ function patrol(f, dt) {
   if (far || !foeMove(f, f.dir * 18 * dt)) { f.dir = -f.dir; f.wait = 0.7 + Math.random() * 1.1; }
 }
 
+// ===== Alarm i nawigacja wrogów =====
+// Wróg, który cię dostrzeże, podnosi alarm: śpiący wstają, drony ruszają, a żołnierze zbiegają się do ciebie
+function raiseAlarm(f) {
+  if (!game.al || game.al.ri !== ri) game.al = { ri, t: 0, x: P.x, r: P.r, msg: 0 };
+  const a = game.al, fresh = a.t <= 0;
+  a.t = 9; if (!P.air) { a.x = P.x; a.r = P.r; }
+  if (!fresh) return;
+  let n = 0;
+  for (const o of FOES) {
+    if (o === f || !o.alive || o.k === 'lord') continue;
+    if (isDrone(o)) { if (o.st === 'idle' || o.st === 'sleep') { o.st = 'chase'; o.t = 0; o.cd = Math.max(o.cd, 1); o.aw = true; n++; } continue; }
+    if (o.st === 'sleep') { o.st = 'idle'; o.t = 0; o.cd = 1; }
+    if (!o.aw) { o.mark = { s: '!', t: 1.2 }; o.aw = true; o.lost = 0; n++; }
+    o.hunt = true; o.nav = null;
+  }
+  if (n) { SND.alarm(); if (a.msg <= 0) { say('Alarm! Wrogowie zbiegają się do ciebie.', 2); a.msg = 15; } }
+}
+function updAlarm(dt) {
+  const a = game.al;
+  if (!a || a.ri !== ri) return;
+  a.msg -= dt;
+  if (a.t <= 0) return;
+  a.t -= dt;
+  // Żołnierze przekazują sobie twoją pozycję przez komunikatory
+  if (P.st !== 'dead' && !P.air && HANGST.indexOf(P.st) < 0) { a.x = P.x; a.r = P.r; }
+}
+const navStand = (r, c) => c >= 0 && c < COLS && hasFloor(r, c) && !isWall(r, c) && !'SEQVFNJ'.includes(cell(r, c)) &&
+  !gateBlocks(r, c) && floorY(r) - 12 < RD.wl;
+const navOpen = (r, c) => c >= 0 && c < COLS && !isWall(r, c) && !gateBlocks(r, c);
+// Możliwe ruchy z kafla: marsz, przeskok nad przepaścią, zeskok niżej, wskok piętro wyżej przez otwór w stropie
+function navEdges(r, c) {
+  const E = [];
+  for (const s of [-1, 1]) {
+    const c1 = c + s;
+    if (!navOpen(r, c1)) continue;
+    if (navStand(r, c1)) E.push({ r, c: c1, m: 'walk', s });
+    if (!hasFloor(r, c1)) {
+      for (let g = 2; g <= 3; g++) {
+        const c2 = c + s * g;
+        if (!navOpen(r, c2)) break;
+        if (navStand(r, c2)) { E.push({ r, c: c2, m: 'gap', s, g }); break; }
+        if (hasFloor(r, c2)) break;
+      }
+      for (let r2 = r + 1; r2 < ROWS; r2++) {
+        if (isWall(r2, c1)) break;
+        if (hasFloor(r2, c1)) { if (navStand(r2, c1)) E.push({ r: r2, c: c1, m: 'drop', s }); break; }
+      }
+    }
+    if (r > 0 && !hasFloor(r - 1, c) && navOpen(r - 1, c) && navStand(r - 1, c1)) E.push({ r: r - 1, c: c1, m: 'up', s });
+  }
+  return E;
+}
+// BFS po kaflach komnaty: pierwszy krok drogi do miejsca najbliższego celowi (null = już najbliżej)
+function navStep(f, tr, tc) {
+  const c0 = colOf(f.x), K = (r, c) => r * COLS + c;
+  if (!navStand(f.r, c0)) return null;
+  const st = { r: f.r, c: c0 }, prev = new Map([[K(f.r, c0), null]]), q = [st];
+  let best = st, bs = Math.abs(f.r - tr) * 20 + Math.abs(c0 - tc);
+  while (q.length) {
+    const n = q.shift();
+    for (const e of navEdges(n.r, n.c)) {
+      const k = K(e.r, e.c);
+      if (prev.has(k)) continue;
+      prev.set(k, n); q.push(e);
+      const sc = Math.abs(e.r - tr) * 20 + Math.abs(e.c - tc);
+      if (sc < bs) { bs = sc; best = e; }
+    }
+  }
+  let cur = best;
+  while (cur !== st) { const p = prev.get(K(cur.r, cur.c)); if (p === st) return cur; cur = p; }
+  return null;
+}
+function foeJump(f, e) {
+  const s = e.s, c = colOf(f.x), cx = c * TW + 16;
+  f.air = true; f.st = 'fjump'; f.t = 0; f.dir = s; f.nav = null;
+  if (e.m === 'up') { f.vy = -320; f.vx = s * 48; }
+  else if (e.m === 'gap') { f.vy = -220; f.vx = s * (e.g * TW - (f.x - cx) * s) / 0.71; }
+  else { f.x = (c + (s > 0 ? 1 : 0)) * TW + s * 3; f.vy = 0; f.vx = s * 30; }
+  burst(f.x, f.y, 4, '#a89878', 40, 15);
+}
+// Pościg po alarmie: droga przez platformy do ostatniej znanej pozycji gracza
+function hunt(f, dt, sp) {
+  const a = game.al;
+  if (!a || a.ri !== ri || a.t <= 0) { f.hunt = false; f.nav = null; f.hx = f.x; patrol(f, dt); return; }
+  if ((f.nt = (f.nt || 0) - dt) <= 0 || !f.nav) { f.nav = navStep(f, a.r, colOf(a.x)); f.nt = 0.35; }
+  const e = f.nav, v = 44 * sp * dt;
+  if (!e) {
+    if (a.r === f.r && Math.abs(a.x - f.x) > 10) foeMove(f, Math.sign(a.x - f.x) * v);
+    f.dir = Math.sign(a.x - f.x) || f.dir;
+    return;
+  }
+  f.dir = e.s;
+  if (e.m === 'walk') { if (!foeMove(f, e.s * v) || colOf(f.x) === e.c) f.nt = 0; return; }
+  // Najpierw na krawędź (przy wskoku – na przeciwny brzeg kafla, pod otwór), potem skok
+  const edge = colOf(f.x) * TW + 16 + e.s * (e.m === 'up' ? -6 : 6), gx = edge - f.x;
+  if (Math.abs(gx) > 1.5) { if (!foeMove(f, Math.sign(gx) * Math.min(Math.abs(gx), v))) f.nt = 0; if (e.m === 'up') f.dir = e.s; return; }
+  foeJump(f, e);
+}
+
 function shoot(f) {
   const v = (f.k === 'sniper' ? 360 : f.k === 'rifle' ? 210 : 180) * (1 + 0.3 * diff());
   const R = f.race || {};
@@ -2358,22 +2477,30 @@ function updTrooper(f, dt) {
   const dx = P.x - f.x, d = Math.abs(dx);
   const same = playerOnRow(f.r), df = diff(), dk = 1 - 0.35 * df;
   const snip = f.k === 'sniper', shd = f.k === 'shield', R = f.race || {}, sp = R.sp || 1;
+  // Skok między platformami (albo spadek po trafieniu w locie)
+  if (f.air) {
+    const lr = air(f, dt);
+    if (lr < 0) return;
+    if (lr >= ROWS) { f.alive = false; f.st = 'gone'; return; }
+    f.vx = 0; burst(f.x, f.y, 4, '#a89878', 40, 15); SND.thud();
+    if (f.st === 'fjump') { f.st = 'idle'; f.t = 0; f.cd = Math.max(f.cd, 0.35); }
+  }
   // Skrzelak powoli odnawia życie, gdy nikt go nie rani
   if (R.regen && f.hp < f.max && (f.rg += dt) > R.regen) { f.rg = 0; f.hp++; burst(f.x, f.y - 22, 6, '#60ffb0', 40, 30, true); }
   // Nieświadomy strażnik widzi tylko przed sobą i z bliska; za plecami słyszy bieg/lądowanie albo oddech tuż obok
   const vis = (snip ? 170 : 100) + 20 * df;
   const hear = d < 14 || (d < 36 && ['run', 'land', 'jump', 'fall'].includes(P.st));
   const see = same && los(f.r, f.x, P.x) && (f.aw ? d < (snip ? 260 : 200) : ((Math.sign(dx) === f.dir && d < vis) || hear));
-  if (see) { if (!f.aw) { f.aw = true; f.cd = Math.max(f.cd, 0.5); f.mark = { s: '!', t: 1 }; } f.lost = 0; }
+  if (see) { if (!f.aw) { f.aw = true; f.cd = Math.max(f.cd, 0.5); f.mark = { s: '!', t: 1 }; } f.lost = 0; raiseAlarm(f); }
   else if (f.aw && (f.lost += dt) > 4) { f.aw = false; f.mark = { s: '?', t: 1 }; }
   switch (f.st) {
     case 'sleep':
       if ((lvl === 0 && P.sword) || (same && d < 60)) {
-        f.st = 'idle'; f.t = 0; f.cd = 1; f.aw = true; SND.alarm(); say('Strażnik podnosi alarm!', 2);
+        f.st = 'idle'; f.t = 0; f.cd = 1; f.aw = true; SND.alarm(); say('Strażnik podnosi alarm!', 2); raiseAlarm(f);
       }
       break;
     case 'idle': {
-      if (!see) { patrol(f, dt); break; }
+      if (!see) { if (f.hunt) hunt(f, dt, sp); else patrol(f, dt); break; }
       f.dir = Math.sign(dx) || f.dir;
       if (d < 22) { f.st = 'bash'; f.t = 0; f.hit = false; break; }
       if (R.melee) {
@@ -2395,7 +2522,8 @@ function updTrooper(f, dt) {
         if (f.sd) foeMove(f, f.sd * 16 * sp * dt);
       }
       f.cd -= dt * HARD;
-      if (f.cd <= 0) { f.st = 'aim'; f.t = 0; }
+      // Ostrzał na zmianę: gdy kompan właśnie strzela, czeka chwilę – ogień spada na ciebie bez przerw
+      if (f.cd <= 0) { if ((game.vol || 0) > 0) f.cd = 0.15 + Math.random() * 0.2; else { game.vol = 0.3; f.st = 'aim'; f.t = 0; } }
       break;
     }
     case 'aim':
@@ -2792,6 +2920,7 @@ function update(dt) {
   updPlats(dt);
   if (!game.qte && !game.lock) updPlayer(dt);
   roomCheck();
+  game.vol = Math.max(0, (game.vol || 0) - dt); updAlarm(dt);
   for (const f of FOES) updFoe(f, dt);
   updMines(dt);
   for (const w of WAVES) w.t += dt;
@@ -3825,6 +3954,7 @@ function drawFoe(f) {
         if (f.mv > 0) a = f.aw ? walkPose(POSE.aim, f.ph) : gait(POSE.stand, f.ph, false, true);
         break;
       case 'aim': case 'fire': a = POSE.aim; break;
+      case 'fjump': a = POSE.jump; break;
       case 'dodge': a = POSE.jump; y -= Math.sin(Math.PI * Math.min(1, f.t / 0.34)) * 7; break;
       case 'charge': a = walkPose(POSE.fight || POSE.aim, f.t * 9); break;
       case 'bash': a = f.t < (R.melee === 'pazur' ? 0.18 : 0.3) ? POSE.bashw : POSE.bash; break;

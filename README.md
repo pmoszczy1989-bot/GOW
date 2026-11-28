@@ -103,6 +103,11 @@ Na granicy komnat otwarty rząd musi być suchy albo zalany po obu stronach – 
 - **Nowi wrogowie**: *tarczownik* blokuje ciosy i odbite strzały z przodu – zajdź go od tyłu albo ogłusz aurą;
   *snajper* celuje czerwonym laserem z daleka szybkim, mocnym strzałem i ucieka przed ostrzem;
   *łowca* lata na plecaku odrzutowym i strzela ukośnie – zestrzel go odbitym strzałem lub cięciem w powietrzu.
+- **Alarm i pościg**: wróg, który cię dostrzeże (albo obudzony strażnik), podnosi alarm – śpiący wstają, drony ruszają,
+  a żołnierze zbiegają się do twojej pozycji, przechodząc między platformami: przeskakują przepaści (1–2 kafle), zeskakują niżej
+  i wskakują piętro wyżej przez otwory w stropie (`navEdges`/`navStep` – BFS po kaflach, `hunt`, `foeJump`). Alarm gaśnie po 9 s
+  bez kontaktu. Strzelcy prowadzą ostrzał na zmianę (`game.vol`). W komnatach z żołnierzami pojawiają się posiłki
+  (`reinforce` w `mkRoom`: +1, od poziomu 7 czasem +2, w stylu załogi komnaty).
 - **Obce nacje** (każda planeta ma swoją, wymieszaną z żołnierzami imperium):
   *droid wartowniczy* (Cytadela) strzela seriami po 3 i nie robi uników; *jaszczur* (Sarrak) prawie zawsze odskakuje i strzela dubletem;
   *skrzelak* (Thalos) pluje kwasem i odnawia życie, gdy go nie ranisz; *mroźny olbrzym* (Krio) nie ma broni, szarżuje i bije pięścią;
