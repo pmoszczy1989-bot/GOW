@@ -489,7 +489,9 @@ function mkFoe(f) {
     cd: 1.1 + Math.random() * 0.7, vx: 0, vy: 0, air: false, hit: false, shots: 0, ft: 0,
     white: 0, mf: 0, bb: 0, trail: [], aw: false, lost: 0, wait: Math.random(), mv: 0, sd: 0, sdt: 0, fury: false,
     sty: f.sty, name: f.name, dbl: !!f.dbl, dual: !!f.dual, ph: 0, lv: Math.min(4, lordLv()), mark: null, lift: 0,
+    race: RACE[f.sty] || null, rg: 0,
   };
+  if (o.race && o.race.hp) o.hp = o.max = hp + Math.round(HARD * o.race.hp);
   if (f.k === 'drone' || f.k === 'jet') { o.y = o.hy = f.r * RH + 30; o.ph = Math.random() * 6; }
   return o;
 }
@@ -764,7 +766,9 @@ function die(kind) {
     strzal: 'Strzał z blastera dosięgnął celu.', kolba: 'Żołnierz powalił cię kolbą.',
     lord: 'Mroczny Lord cię pokonał.', gruz: 'Przygniótł cię gruz.', bariera: 'Bariera energetyczna cię poraziła.',
     piasek: 'Ruchome piaski cię wciągnęły.', tlen: 'Zabrakło ci tlenu.', mina: 'Mina głębinowa rozerwała pancerz.',
-    dron: 'Dron bojowy cię staranował.', lawa: 'Lawa cię pochłonęła.', ogien: 'Płomienie z kratki cię spaliły.' };
+    dron: 'Dron bojowy cię staranował.', lawa: 'Lawa cię pochłonęła.', ogien: 'Płomienie z kratki cię spaliły.',
+    kwas: 'Kwas skrzelaka przeżarł pancerz.', zar: 'Kula magmy cię spopieliła.', piesc: 'Mroźny olbrzym zmiażdżył cię pięścią.',
+    pazur: 'Pazury modliszaka dosięgły celu.' };
   const L = ROOMS.length && ROOMS.flatMap(R => R.foes).find(f => f.k === 'lord');
   if (L) t.lord = lordName(L) + ' wygrywa ten pojedynek.';
   say(t[kind] || 'Zginąłeś.', 99);
@@ -773,7 +777,7 @@ function die(kind) {
 function hurtPlayer(n, pushDir, kind) {
   if (P.st === 'dead' || P.inv > 0) return;
   if (P.xhp > 0) { const k = Math.min(n, P.xhp); P.xhp -= k; n -= k; burst(P.x, P.y - 22, 10, '#60f090', 60, 50, true); }   // najpierw tracisz serca z eliksiru
-  if (P.sh > 0 && (kind === 'kolba' || kind === 'dron' || kind === 'strzal')) {
+  if (P.sh > 0 && ['kolba', 'dron', 'strzal', 'kwas', 'zar', 'piesc', 'pazur'].includes(kind)) {
     P.sh = 0; P.inv = 0.4; SND.deflect(); burst(P.x, P.y - 18, 14, '#80c0ff', 90, 60, true);
     say('Tarcza aury pochłania cios.', 1); return;
   }
@@ -1145,6 +1149,17 @@ const isDrone = f => f.k === 'drone' || f.k === 'jet';
 // Tarcza tarczownika zatrzymuje ciosy i strzały z przodu (s – strona ataku względem wroga), chyba że jest ogłuszony
 const shieldUp = (f, s) => f.k === 'shield' && f.alive && s === f.dir && !['tstun', 'knock', 'pulled', 'choke', 'sleep', 'fin', 'fdead'].includes(f.st);
 const FOENAME = { blaster: 'Strażnik z blasterem', rifle: 'Szturmowiec z karabinem', shield: 'Tarczownik', sniper: 'Snajper' };
+// Obce nacje (klucz = sty): własny wygląd i taktyka walki
+//  burst – seria strzałów, nododge – bez uników, dodge – szansa uniku, sp – mnożnik szybkości, regen – sekundy na odnowienie 1 pkt życia,
+//  acid/fire – rodzaj pocisku, melee – walczy wręcz (bez broni), charge – szarża, cloak – niewidoczny do wykrycia, hp – dodatkowe życie
+const RACE = {
+  droid: { name: 'Droid wartowniczy', burst: 3, nododge: true },
+  saur: { name: 'Jaszczur z Sarraku', dodge: 0.8, sp: 1.6, burst: 2 },
+  gill: { name: 'Skrzelak z Thalos', regen: 2.5, acid: true },
+  yeti: { name: 'Mroźny olbrzym', melee: 'piesc', charge: true, hp: 2, sp: 1.2, nododge: true },
+  mantis: { name: 'Modliszak z Verdanu', melee: 'pazur', cloak: true, sp: 2.2, dodge: 0.6 },
+  magma: { name: 'Magmowiec z Ignis', fire: true, hp: 1, nododge: true },
+};
 const pullable = f => f.alive && !['fin', 'fdead', 'ffall', 'gone', 'pulled', 'meditate', 'rise', 'choke'].includes(f.st);
 const PNAME = { pull: 'Przyciąganie', push: 'Odepchnięcie', shield: 'Tarcza', trick: 'Omamienie', heal: 'Uzdrowienie',
   throw: 'Rzut ostrzem', choke: 'Uścisk', bolt: 'Pioruny' };
@@ -2127,7 +2142,7 @@ function resolveStrike() {
 
 // Zwraca true, gdy cios był śmiertelny
 function hitFoe(f, n, dir) {
-  f.hp -= n; f.white = 0.12; game.hud = f; game.hudT = 3; f.aw = true;
+  f.hp -= n; f.white = 0.12; game.hud = f; game.hudT = 3; f.aw = true; f.rg = 0;
   SND.hit(); shake(2); game.stop = 0.06;
   if (isDrone(f)) {
     sparks(f.x, f.y, '#60e0ff', 8);
@@ -2152,13 +2167,13 @@ function hitFoe(f, n, dir) {
       say(lordName(f) + ' – pojedynek wygrany! Pole siłowe gaśnie.', 4);
       SND.lord(); shake(4); flash = { col: '#ffffff', t: 0.3 };
       sparks(f.x, f.y - 30, RED.col, 30); addCrys(10, f.x, f.y - 30);
-    } else { say((FOENAME[f.k] || 'Przeciwnik') + ' pokonany. +2 ◆', 2); addCrys(2, f.x, f.y - 20); }
+    } else { say((f.race ? f.race.name : FOENAME[f.k] || 'Przeciwnik') + ' pokonany. +2 ◆', 2); addCrys(2, f.x, f.y - 20); }
     foePush(f, dir * 6);
     onKill(f);
     if (f.st === 'fdead') {
       // Upadek zamiast natychmiastowej śmierci; broń szturmowca rozcięta na pół
       f.st = 'fin'; f.t = 0; f.fd = dir; f.hd = false;
-      if (f.k !== 'lord') {
+      if (f.k !== 'lord' && !(f.race && f.race.melee)) {
         const L = f.k === 'rifle' || f.k === 'sniper' ? 6 : 4;
         debris(f.x + f.dir * 8, f.y - 21, f.r, dir * 50 + 20, -150, L, '#1e2026', 0.8);
         debris(f.x + f.dir * 12, f.y - 21, f.r, dir * 90 - 10, -110, L, '#2a2e36', 0.8);
@@ -2206,7 +2221,10 @@ function patrol(f, dt) {
 
 function shoot(f) {
   const v = (f.k === 'sniper' ? 360 : f.k === 'rifle' ? 210 : 180) * (1 + 0.3 * diff());
-  BOLTS.push({ x: f.x + f.dir * 14, y: f.y - 21, r: f.r, vx: f.dir * v, o: 'e', src: f, big: f.k === 'sniper' });
+  const R = f.race || {};
+  // Magmowiec ciska wolną kulą ognia, skrzelak pluje kwasem
+  BOLTS.push({ x: f.x + f.dir * 14, y: f.y - 21, r: f.r, vx: f.dir * v * (R.fire ? 0.6 : 1), o: 'e', src: f,
+    big: f.k === 'sniper' || !!R.fire, fire: !!R.fire, acid: !!R.acid });
   f.mf = 0.06; SND.blast();
 }
 
@@ -2337,7 +2355,9 @@ function knock(f, dt) {
 function updTrooper(f, dt) {
   const dx = P.x - f.x, d = Math.abs(dx);
   const same = playerOnRow(f.r), df = diff(), dk = 1 - 0.35 * df;
-  const snip = f.k === 'sniper', shd = f.k === 'shield';
+  const snip = f.k === 'sniper', shd = f.k === 'shield', R = f.race || {}, sp = R.sp || 1;
+  // Skrzelak powoli odnawia życie, gdy nikt go nie rani
+  if (R.regen && f.hp < f.max && (f.rg += dt) > R.regen) { f.rg = 0; f.hp++; burst(f.x, f.y - 22, 6, '#60ffb0', 40, 30, true); }
   // Nieświadomy strażnik widzi tylko przed sobą i z bliska; za plecami słyszy bieg/lądowanie albo oddech tuż obok
   const vis = (snip ? 170 : 100) + 20 * df;
   const hear = d < 14 || (d < 36 && ['run', 'land', 'jump', 'fall'].includes(P.st));
@@ -2354,6 +2374,14 @@ function updTrooper(f, dt) {
       if (!see) { patrol(f, dt); break; }
       f.dir = Math.sign(dx) || f.dir;
       if (d < 22) { f.st = 'bash'; f.t = 0; f.hit = false; break; }
+      if (R.melee) {
+        // Wojownik wręcz: skraca dystans, olbrzym co jakiś czas szarżuje
+        f.cd -= dt * HARD;
+        if (d < 26) { f.st = 'bash'; f.t = 0; f.hit = false; }
+        else if (R.charge && f.cd <= 0 && d < 150) { f.st = 'charge'; f.t = 0; f.mark = { s: '!', t: 0.6 }; SND.alarm(); }
+        else foeMove(f, f.dir * 30 * sp * dt);
+        break;
+      }
       // Taktyka: trzyma dystans strzału, cofa się przed ostrzem i przestępuje z nogi na nogę
       const pref = snip ? 180 : shd ? 40 : f.k === 'rifle' ? 110 : 85;
       if (snip && d < 120) foeMove(f, -f.dir * 30 * dt);
@@ -2362,7 +2390,7 @@ function updTrooper(f, dt) {
       else {
         f.sdt -= dt;
         if (f.sdt <= 0) { f.sdt = 0.5 + Math.random() * 0.9; f.sd = [-1, 0, 0, 1][Math.floor(Math.random() * 4)]; }
-        if (f.sd) foeMove(f, f.sd * 16 * dt);
+        if (f.sd) foeMove(f, f.sd * 16 * sp * dt);
       }
       f.cd -= dt * HARD;
       if (f.cd <= 0) { f.st = 'aim'; f.t = 0; }
@@ -2372,7 +2400,7 @@ function updTrooper(f, dt) {
       if (!see) { f.st = 'idle'; break; }
       f.dir = Math.sign(dx) || f.dir;
       if (d < 22) { f.st = 'bash'; f.t = 0; f.hit = false; break; }
-      if (f.t > (snip ? 1.0 - 0.2 * df : 0.45 - 0.15 * df)) { f.st = 'fire'; f.t = 0; f.shots = f.k === 'rifle' ? 2 : 1; f.ft = 0; }
+      if (f.t > (snip ? 1.0 - 0.2 * df : 0.45 - 0.15 * df)) { f.st = 'fire'; f.t = 0; f.shots = R.burst || (f.k === 'rifle' ? 2 : 1); f.ft = 0; }
       break;
     case 'fire':
       f.ft -= dt;
@@ -2382,15 +2410,20 @@ function updTrooper(f, dt) {
       }
       break;
     case 'sblock': if (f.t > 0.3) { if (d < 26) { f.st = 'bash'; f.t = 0; f.hit = false; } else { f.st = 'idle'; f.cd = Math.max(f.cd, 0.3); } } break;
+    case 'charge':
+      // Szarża olbrzyma – kończy się ciosem pięścią
+      if (d < 26 || f.t > 1.2 || !foeMove(f, f.dir * 120 * dt)) { f.st = 'bash'; f.t = 0.12; f.hit = false; }
+      if (Math.random() < dt * 20) burst(f.x - f.dir * 6, f.y, 1, '#e0f0ff', 30, 20);
+      break;
     case 'bash':
-      if (!f.hit && f.t > 0.3) {
+      if (!f.hit && f.t > (R.melee === 'pazur' ? 0.18 : 0.3)) {
         f.hit = true;
         if (same && d < 26 && Math.sign(dx) === f.dir) {
           if (P.st === 'block') {
             SND.clash(); sparks(f.x + f.dir * 10, f.y - 22, game.blade.col, 6);
             f.st = 'tstun'; f.t = 0; break;
           }
-          hurtPlayer(1, f.dir, 'kolba');
+          hurtPlayer(1, f.dir, R.melee || 'kolba');
         }
       }
       if (f.t > 0.55) { f.st = 'idle'; f.cd = 0.5; }
@@ -2398,13 +2431,13 @@ function updTrooper(f, dt) {
     case 'thurt':
       if (f.t > 0.32) {
         // Po trafieniu czasem odskakuje do tyłu i od razu składa się do strzału
-        if (d < 50 && Math.random() < (shd ? 0 : 0.4)) { f.st = 'dodge'; f.t = 0; SND.swing(); }
+        if (d < 50 && Math.random() < (shd || R.nododge ? 0 : R.dodge || 0.4)) { f.st = 'dodge'; f.t = 0; SND.swing(); }
         else { f.st = 'idle'; f.cd = Math.max(f.cd, 0.4); }
       }
       break;
     case 'dodge':
       foeMove(f, -f.dir * 95 * dt);
-      if (f.t > 0.34) { f.st = 'aim'; f.t = 0.1; }
+      if (f.t > 0.34) { f.st = R.melee ? 'idle' : 'aim'; f.t = 0.1; }
       break;
     case 'tstun': if (f.t > 0.7) { f.st = 'idle'; f.cd = 0.3; } break;
   }
@@ -2607,6 +2640,10 @@ function boltHitsPlayer(b) {
     SND.deflect(); burst(b.x, b.y, 8, '#80c0ff', 80, 50, true);
     return;
   }
+  if (armed && b.fire && (P.st === 'block' || P.st === 'strike' || P.st === 'fin' || P.as > 0)) {
+    // Kuli magmy nie da się odbić – ostrze tylko ją rozprasza
+    b.dead = true; SND.deflect(); burst(b.x, b.y, 10, '#ffa030', 80, 60, true); return;
+  }
   if (armed && (P.st === 'block' || P.st === 'strike' || P.st === 'fin' || P.as > 0)) {
     // Cios lub zasłona odbija strzał prosto w strzelca
     b.vx = -b.vx * 1.15; b.vy = -(b.vy || 0); b.o = 'p'; b.back = true;
@@ -2628,14 +2665,14 @@ function boltHitsPlayer(b) {
   }
   b.dead = true;
   if (P.inv > 0) { burst(b.x, b.y, 4, '#ff6040', 60, 40, true); return; }
-  if (armed && ['stand', 'fight', 'fstep', 'turn', 'run', 'step', 'land'].includes(P.st) && Math.random() < 0.6) {
+  if (armed && !b.fire && ['stand', 'fight', 'fstep', 'turn', 'run', 'step', 'land'].includes(P.st) && Math.random() < 0.6) {
     SND.deflect(); sparks(b.x, b.y, game.blade.col, 6);
     burst(b.x, b.y, 4, '#ff6040', 120, 120, true);
     if (FIGHTST.includes(P.st) || P.st === 'stand') { P.st = 'block'; P.t = 0.2; }
     return;
   }
-  burst(b.x, b.y, 6, '#ff6040', 60, 40, true);
-  hurtPlayer(1, Math.sign(b.vx), 'strzal');
+  burst(b.x, b.y, 6, b.acid ? '#60ff90' : '#ff6040', 60, 40, true);
+  hurtPlayer(1, Math.sign(b.vx), b.fire ? 'zar' : b.acid ? 'kwas' : 'strzal');
 }
 
 // ===== Pułapki i mechanizmy =====
@@ -3288,6 +3325,31 @@ const STY = {
   ash: { type: 'trooper', hand: '#1a1010', handB: '#100808', arm: '#3a2a26', armB: '#241816',
     body: '#2e2220', plate: '#5a4440', leg: '#241a18', legB: '#160e0c', boot: '#0a0606', belt: '#5a1a10',
     helm: '#2a1e1c', helmB: '#160e0c', visor: '#ff6010', stripe: '#ff4010', thick: 5 },
+  // ===== Obce nacje =====
+  // Droid wartowniczy (Cytadela) – chudy korpus z metalu, wydłużona głowa, jedno oko
+  droid: { type: 'droid', hand: '#3a3c40', handB: '#26282c', arm: '#7a7e86', armB: '#54585e',
+    body: '#8a8e96', plate: '#b8bcc4', leg: '#6a6e76', legB: '#484c52', boot: '#2a2c30', belt: '#3a3c40',
+    helm: '#9a9ea6', helmB: '#5a5e66', visor: '#ffd030', thick: 3 },
+  // Jaszczur z Sarraku – łuski w kolorze ochry, kryza za głową
+  saur: { type: 'saur', skin: '#8a9a3a', hand: '#6a7a2a', handB: '#4a561c', arm: '#7a8a34', armB: '#56622a',
+    body: '#a07a3a', leg: '#6a7a2a', legB: '#4a561c', boot: '#3a2a14', belt: '#5a3a18',
+    frill: '#d06030', frillB: '#8a3a1a', visor: '#ffe040', thick: 4 },
+  // Skrzelak z Thalos – szeroka głowa, wyłupiaste oczy, świecące skrzela
+  gill: { type: 'gill', skin: '#4a8a8a', hand: '#3a6e70', handB: '#28504e', arm: '#4a7e80', armB: '#30585a',
+    body: '#5a4a7a', leg: '#3a6e70', legB: '#28504e', boot: '#1a2a2e', belt: '#2a2440',
+    fin: '#7ac0c0', visor: '#60ffb0', thick: 5 },
+  // Mroźny olbrzym z Krio – biała sierść, rogi, lodowe oczy
+  yeti: { type: 'yeti', skin: '#6a7a8a', hand: '#c8d4e0', handB: '#9aa8b8', arm: '#e0e8f0', armB: '#b0bccc',
+    body: '#e8eef4', leg: '#d0dae4', legB: '#a0acbc', boot: '#6a7a8a', belt: '#4a5a6e',
+    fur: '#eef4fa', furB: '#b8c4d2', horn: '#5a6470', visor: '#40c0ff', thick: 7, big: 1.25 },
+  // Modliszak z Verdanu – owad o trójkątnej głowie i pazurach jak sierpy
+  mantis: { type: 'mantis', skin: '#6ab040', hand: '#4a8a2a', handB: '#346220', arm: '#5aa034', armB: '#3e7426',
+    body: '#5a9a34', leg: '#4a8a2a', legB: '#346220', boot: '#24401a', belt: '#2e5a1e',
+    claw: '#c8f070', visor: '#ff4060', thick: 3 },
+  // Magmowiec z Ignis – skalne ciało pocięte żarzącymi się szczelinami
+  magma: { type: 'magma', skin: '#3a2a26', hand: '#2a1c18', handB: '#1a100c', arm: '#4a3430', armB: '#2e1e1a',
+    body: '#3a2622', plate: '#ff7020', leg: '#2e1e1a', legB: '#1e120e', boot: '#140a08', belt: '#ff5010',
+    visor: '#ffb030', thick: 6 },
   // Królowa Mrozu – biel i lód
   lord4: { type: 'lord', skin: '#d8e8f0', hand: '#c8d8e8', handB: '#8aa0b8', arm: '#a8c0d8', armB: '#6a84a0',
     body: '#b8d0e4', leg: '#7a94ac', legB: '#4a6078', boot: '#1a2a3a', belt: '#40c0ff',
@@ -3356,6 +3418,55 @@ function drawHead(h, n, dir, S, C) {
     dot(x + dir * 1.6, y - 1, 0.6, C(S.visor));
     EQ.push({ x: x + dir * 1.6, y: y - 1, col: S.visor, r: 3, a: 0.2 });
     ctx.fillStyle = C(S.wrapB); ctx.fillRect(x - 2.5, y + 0.6, 5, 1.4);
+  } else if (S.type === 'droid') {
+    seg(n, [x - dir * 0.5, y + 2], 1.2, C(S.helmB));                                             // pręt szyi
+    ctx.fillStyle = C(S.helm); ctx.beginPath(); ctx.ellipse(x - dir * 0.6, y - 1.2, 2.4, 3.2, dir * 0.5, 0, Math.PI * 2); ctx.fill();
+    seg([x, y - 0.2], [x + dir * 4.6, y + 1.2], 2, C(S.helm));                                    // wydłużona szczęka
+    seg([x + dir * 1, y + 1], [x + dir * 4, y + 1.8], 0.6, C(S.helmB));
+    seg([x - dir * 1.4, y - 4], [x - dir * 2.6, y - 6.6], 0.5, C(S.helmB));                       // antena
+    dot(x + dir * 1.2, y - 1.4, 0.9, C(S.visor));
+    EQ.push({ x: x + dir * 1.2, y: y - 1.4, col: S.visor, r: 4, a: 0.35 });
+  } else if (S.type === 'saur') {
+    poly([[x - dir * 1, y - 3], [x - dir * 6, y - 5.5], [x - dir * 4.4, y - 1.2], [x - dir * 6.6, y + 2.4], [x - dir * 1.4, y + 2]], C(S.frill));   // kryza
+    seg([x - dir * 2, y - 3], [x - dir * 5, y - 4.4], 0.5, C(S.frillB)); seg([x - dir * 2, y + 1], [x - dir * 5.4, y + 1.8], 0.5, C(S.frillB));
+    ctx.fillStyle = C(S.skin); ctx.beginPath(); ctx.ellipse(x, y - 0.6, 2.8, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+    seg([x, y + 0.4], [x + dir * 5, y + 1.4], 2.4, C(S.skin));                                    // pysk
+    seg([x + dir * 1.5, y + 1.8], [x + dir * 4.6, y + 2], 0.5, C('#2a2a10'));
+    dot(x + dir * 1.2, y - 1.4, 0.8, C(S.visor)); ctx.fillStyle = C('#1a1a08'); ctx.fillRect(x + dir * 1.2 - 0.2, y - 2.1, 0.4, 1.4);
+    EQ.push({ x: x + dir * 1.2, y: y - 1.4, col: S.visor, r: 3, a: 0.2 });
+  } else if (S.type === 'gill') {
+    poly([[x - dir * 2, y - 1], [x - dir * 5.5, y - 3], [x - dir * 4.6, y + 2.6], [x - dir * 1.6, y + 2]], C(S.fin));   // płetwa
+    ctx.fillStyle = C(S.skin); ctx.beginPath(); ctx.ellipse(x + dir * 0.4, y, 3.8, 3, 0, 0, Math.PI * 2); ctx.fill();
+    for (const k of [0, 1, 2]) seg([x - dir * (1.2 - k * 0.2), y + 0.2 + k * 1], [x - dir * (2.4 - k * 0.2), y + 0.2 + k * 1], 0.5, C(S.visor));   // skrzela
+    dot(x - dir * 0.6, y - 2.8, 1.4, C('#e8f0d8')); dot(x + dir * 2.2, y - 2.4, 1.5, C('#e8f0d8'));
+    dot(x - dir * 0.3, y - 2.8, 0.6, C('#101818')); dot(x + dir * 2.6, y - 2.4, 0.7, C('#101818'));
+    seg([x + dir * 1.6, y + 1.6], [x + dir * 4, y + 1], 0.6, C('#1a3a3a'));
+    EQ.push({ x: x - dir * 1.8, y: y + 1.2, col: S.visor, r: 4, a: 0.3 });
+  } else if (S.type === 'yeti') {
+    ctx.fillStyle = C(S.furB); ctx.beginPath(); ctx.ellipse(n[0], n[1], 4.8, 2.2, 0, 0, Math.PI * 2); ctx.fill();   // grzywa
+    ctx.fillStyle = C(S.fur); ctx.beginPath(); ctx.ellipse(x, y - 0.2, 3.8, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = C(S.horn); ctx.lineWidth = 1.3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x - dir * 1.5, y - 3); ctx.quadraticCurveTo(x - dir * 5, y - 4, x - dir * 4.6, y - 7.2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + dir * 1.2, y - 3.4); ctx.quadraticCurveTo(x + dir * 0.4, y - 6, x - dir * 1.4, y - 7); ctx.stroke();
+    ctx.fillStyle = C(S.skin); ctx.beginPath(); ctx.ellipse(x + dir * 1.6, y + 0.4, 2, 2.4, 0, 0, Math.PI * 2); ctx.fill();   // twarz
+    dot(x + dir * 2.2, y - 0.4, 0.7, C(S.visor));
+    seg([x + dir * 1, y + 2], [x + dir * 2.6, y + 2], 0.6, C('#2a3440'));
+    EQ.push({ x: x + dir * 2.2, y: y - 0.4, col: S.visor, r: 4, a: 0.35 });
+  } else if (S.type === 'mantis') {
+    ctx.strokeStyle = C(S.skin); ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(x, y - 2.5); ctx.quadraticCurveTo(x + dir * 1, y - 8, x + dir * 5, y - 8); ctx.stroke();   // czułki
+    ctx.beginPath(); ctx.moveTo(x - dir * 0.6, y - 2.6); ctx.quadraticCurveTo(x - dir * 0.6, y - 9, x + dir * 3, y - 9.5); ctx.stroke();
+    poly([[x - dir * 3, y - 3], [x + dir * 3.4, y - 2], [x + dir * 1.2, y + 3.6], [x - dir * 1.8, y + 1.2]], C(S.skin));
+    ctx.fillStyle = C(S.visor); ctx.beginPath(); ctx.ellipse(x + dir * 0.8, y - 1.6, 1.8, 1.3, dir * 0.4, 0, Math.PI * 2); ctx.fill();
+    EQ.push({ x: x + dir * 0.8, y: y - 1.6, col: S.visor, r: 4, a: 0.35 });
+  } else if (S.type === 'magma') {
+    poly([[x - 3.6, y + 2.6], [x - 3.8, y - 2.4], [x - 1.4, y - 4.2], [x + 2.2, y - 4], [x + 3.8, y - 1.6], [x + 3.4, y + 2.8]], C(S.skin));
+    seg([x - dir * 2.6, y - 2], [x - dir * 0.4, y + 0.4], 0.6, C(S.plate)); seg([x - dir * 0.4, y + 0.4], [x - dir * 1.2, y + 2.4], 0.6, C(S.plate));
+    rrect(dir > 0 ? x + 0.4 : x - 3.2, y - 1.6, 2.8, 1.2, 0.5, C(S.visor));
+    const fl = Math.sin(game.anim * 14 + x) * 0.8;
+    poly([[x - 2.4, y - 3.8], [x - 1.6, y - 7 - fl], [x - 0.2, y - 4.6], [x + 0.8, y - 8 + fl], [x + 1.6, y - 4.4], [x + 2.8, y - 6.4 - fl], [x + 3, y - 3.4]], C('#ff6a18'));
+    EQ.push({ x: x + dir * 1.8, y: y - 1, col: S.visor, r: 5, a: 0.4 });
+    EQ.push({ x, y: y - 6, col: '#ff7020', r: 8, a: 0.35 });
   } else {
     ctx.fillStyle = C(S.hood); ctx.beginPath(); ctx.ellipse(n[0], n[1], 4.2, 1.8, 0, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.moveTo(x - dir * 3.5, y + 4); ctx.quadraticCurveTo(x - dir * 4, y - 6, x + dir * 1, y - 5.2);
@@ -3398,7 +3509,7 @@ function drawFig(x, y, dir, a, S, o) {
   if (upright && S.type === 'lord') {
     poly([[hip[0] - 3, hip[1] - 4], [hip[0] + 3, hip[1] - 4], [hip[0] + 6, hip[1] + 12], [hip[0] - 6, hip[1] + 12]], C(S.cloak));
   }
-  if (S.type === 'trooper' || S.type === 'raider') {
+  if (S.type === 'trooper' || S.type === 'raider' || S.type === 'droid' || S.type === 'magma') {
     seg([neck[0] + dir, neck[1] + 2], [lerp(neck[0], hip[0], 0.6) + dir, lerp(neck[1], hip[1], 0.6)], 1, C(S.plate));
   }
   rrect(hip[0] - 2.5, hip[1] - 3, 5, 2, 0.8, C(S.belt));
@@ -3408,6 +3519,13 @@ function drawFig(x, y, dir, a, S, o) {
   drawHead(head, neck, dir, S, C);
   // Przednia ręka
   seg(neck, e1, 2.2, C(S.arm)); seg(e1, h1, 2, C(S.arm));
+  // Pazury modliszaka (sierpy na obu przedramionach) i pięści olbrzyma
+  if (o.claw) for (const [e, h, col] of [[e2, h2, S.armB], [e1, h1, S.arm]]) {
+    const vx = h[0] - e[0], vy = h[1] - e[1], n = Math.hypot(vx, vy) || 1, ux = vx / n, uy = vy / n;
+    seg(h, [h[0] + ux * 4 - uy * dir * 2, h[1] + uy * 4 - 2.5], 1.1, C(S.claw));
+    seg([h[0] + ux * 4 - uy * dir * 2, h[1] + uy * 4 - 2.5], [h[0] + ux * 1.5, h[1] - 4.5], 0.8, C(S.claw));
+  }
+  if (o.fist) { dot(h2[0], h2[1], 2, C(S.handB)); dot(h1[0], h1[1], 2.3, C(S.hand)); }
   // Broń palna w dłoni
   if (o.gun) {
     const vx = h1[0] - e1[0], vy = h1[1] - e1[1], n = Math.hypot(vx, vy) || 1, ux = vx / n, uy = vy / n;
@@ -3668,7 +3786,7 @@ function drawFoe(f) {
   if (f.st === 'gone') return;
   if (f.k === 'jet') { drawJet(f); return; }
   if (isDrone(f)) { drawDrone(f); return; }
-  const S = STY[f.sty || f.k] || STY[f.k] || STY.blaster;
+  const S = STY[f.sty || f.k] || STY[f.k] || STY.blaster, R = f.race || {};
   let a = POSE.stand, blade = '', ign = 1, tr = false, gun = f.k === 'lord' ? '' : f.k === 'rifle' || f.k === 'sniper' ? 'rifle' : 'blaster', y = f.y - (f.lift || 0), alpha = 1;
   if (f.st === 'pulled' || f.st === 'choke') {
     a = POSE.fall; if (f.k === 'lord') blade = 'hand';
@@ -3706,7 +3824,8 @@ function drawFoe(f) {
         break;
       case 'aim': case 'fire': a = POSE.aim; break;
       case 'dodge': a = POSE.jump; y -= Math.sin(Math.PI * Math.min(1, f.t / 0.34)) * 7; break;
-      case 'bash': a = f.t < 0.3 ? POSE.bashw : POSE.bash; break;
+      case 'charge': a = walkPose(POSE.fight || POSE.aim, f.t * 9); break;
+      case 'bash': a = f.t < (R.melee === 'pazur' ? 0.18 : 0.3) ? POSE.bashw : POSE.bash; break;
       case 'thurt': case 'tstun': a = POSE.hurt; break;
       case 'sblock': a = POSE.block || POSE.aim; break;
       case 'fin':
@@ -3720,9 +3839,18 @@ function drawFoe(f) {
     }
   }
   if (f.k === 'lord' && BOLTS.some(b => b.lb && b.src === f)) blade = '';   // ostrze w locie
-  const eq0 = EQ.length;
+  if (R.melee) gun = '';
+  // Modliszak w kamuflażu – ledwie widoczne drżenie powietrza, dopóki cię nie zauważy
+  if (R.cloak && !f.aw && f.alive && f.white <= 0) alpha *= 0.16 + 0.06 * Math.sin(game.anim * 5 + f.x);
+  const eq0 = EQ.length, big = S.big || 1;
   ctx.globalAlpha = alpha;
-  drawFig(f.x, y, f.dir, a, S, { blade, ign, bc: RED, trail: tr, own: f, gun, mf: f.mf, white: f.white, dbl: f.dbl, dual: f.dual });
+  if (big !== 1) { ctx.save(); ctx.translate(f.x, y); ctx.scale(big, big); ctx.translate(-f.x, -y); }
+  drawFig(f.x, y, f.dir, a, S, { blade, ign, bc: RED, trail: tr, own: f, gun, mf: f.mf, white: f.white, dbl: f.dbl, dual: f.dual,
+    claw: R.melee === 'pazur', fist: R.melee === 'piesc' });
+  if (big !== 1) {
+    ctx.restore();
+    for (let i = eq0; i < EQ.length; i++) { const e = EQ[i]; e.x = f.x + (e.x - f.x) * big; e.y = y + (e.y - y) * big; }
+  }
   ctx.globalAlpha = 1;
   if (alpha < 1) for (let i = eq0; i < EQ.length; i++) EQ[i].a *= alpha;
   if (f.k === 'shield' && !['fin', 'fdead', 'ffall', 'gone'].includes(f.st)) {
@@ -3747,7 +3875,7 @@ function drawFoe(f) {
     const k = (game.anim * 0.8) % 1;
     txt('z', f.x - 2 + k * 4, f.y - 24 - k * 10, `rgba(220,220,255,${1 - k})`, 'center', 7 + k * 2, true);
   }
-  if (f.st === 'fdead' && f.t < 1.5 && f.k !== 'lord' && Math.random() < 0.15) {
+  if (f.st === 'fdead' && f.t < 1.5 && f.k !== 'lord' && (S.type === 'trooper' || S.type === 'droid') && Math.random() < 0.15) {
     burst(f.x + (Math.random() - 0.5) * 10, f.y - 3, 1, '#80c0ff', 30, 30, true);   // iskrzący pancerz
   }
 }
@@ -4151,7 +4279,7 @@ function lighting() {
     glow(l.x, l.y - 2, 42 * fl, T.rgb, 0.22);
   }
   for (const b of BQ) glow((b.h[0] + b.t[0]) / 2, (b.h[1] + b.t[1]) / 2, 30, b.bc.rgb, 0.3);
-  for (const b of BOLTS) glow(b.x, b.y, 16, '255,60,40', 0.35);
+  for (const b of BOLTS) glow(b.x, b.y, b.fire ? 24 : 16, b.acid ? '80,255,140' : b.fire ? '255,140,30' : '255,60,40', 0.35);
   for (const e of EQ) glow(e.x, e.y, e.r, e.rgb || hexRgb(e.col), e.a);
   ctx.globalCompositeOperation = 'source-over';
   ctx.drawImage(vignette(), 0, 0, SW, 180);
@@ -4190,6 +4318,19 @@ function drawEmissive() {
       seg([b.x - ux, b.y - uy], [b.x + ux, b.y + uy], 2.6, `rgba(${RED.rgb},0.9)`);
       seg([b.x - ux, b.y - uy], [b.x + ux, b.y + uy], 1, '#ffffff');
       EQ.push({ x: b.x, y: b.y, col: RED.col, r: 16, a: 0.5, rgb: RED.rgb });
+      continue;
+    }
+    if (b.fire) {
+      // Kula magmy – pulsujący żar z ogonem
+      const fl = 1 + Math.sin(game.anim * 30 + b.x) * 0.15;
+      dot(b.x, b.y, 4.5 * fl, 'rgba(255,90,20,0.45)'); dot(b.x, b.y, 2.8, 'rgba(255,170,40,0.95)'); dot(b.x, b.y, 1.2, '#fff0c0');
+      if (Math.random() < 0.5) burst(b.x - Math.sign(b.vx) * 3, b.y, 1, Math.random() < 0.5 ? '#ff6010' : '#ffc040', 20, 20, true);
+      continue;
+    }
+    if (b.acid) {
+      const v = Math.abs(b.vx) || 1, ux = b.vx / v;
+      seg([b.x, b.y], [b.x - ux * 6, b.y], 3.4, 'rgba(60,255,120,0.35)');
+      dot(b.x, b.y, 1.8, 'rgba(120,255,160,0.95)'); dot(b.x - ux * 3, b.y + 0.6, 1, 'rgba(120,255,160,0.7)');
       continue;
     }
     const v = Math.hypot(b.vx, b.vy || 0) || 1, ux = b.vx / v, uy = (b.vy || 0) / v, L = b.big ? 1.6 : 1;

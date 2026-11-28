@@ -88,6 +88,8 @@ Legenda: `_` podłoga · spacja – brak podłogi (w dolnym rzędzie przepaść,
 `Q` ruchome piaski · `U` wylot powietrza · `N` mina podwodna · `I` lód (ślizga się) · `J` grzyb-trampolina ·
 `F` dysza ognia (parzy co kilka sekund) · `V` lawa (śmierć) · `X` blok aury · `Y` dźwignia. Motywy `theme` 0–11.
 Wrogowie `k`: `blaster`, `rifle`, `shield` (tarczownik), `sniper` (snajper), `jet` (łowca z plecakiem odrzutowym), `drone`, `lord`.
+Wygląd `sty` (żołnierze imperium: `raider`, `aqua`, `snow`, `scout`, `ash`) albo obca nacja z tabeli `RACE` (`game.js`): 
+`droid`, `saur`, `gill`, `yeti`, `mantis`, `magma` – nacja zmienia wygląd i taktykę, `k` nadal ustala broń i bazowe życie.
 Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0, c1, sp }` (szerokie, 52 px),
 `wl` poziom wody w px (125 – zalany dolny rząd, -100 – cała komnata pod wodą).
 Na granicy komnat otwarty rząd musi być suchy albo zalany po obu stronach – przejście do sąsiedniej komnaty nigdy nie zmienia chodzenia w pływanie.
@@ -101,6 +103,11 @@ Na granicy komnat otwarty rząd musi być suchy albo zalany po obu stronach – 
 - **Nowi wrogowie**: *tarczownik* blokuje ciosy i odbite strzały z przodu – zajdź go od tyłu albo ogłusz aurą;
   *snajper* celuje czerwonym laserem z daleka szybkim, mocnym strzałem i ucieka przed ostrzem;
   *łowca* lata na plecaku odrzutowym i strzela ukośnie – zestrzel go odbitym strzałem lub cięciem w powietrzu.
+- **Obce nacje** (każda planeta ma swoją, wymieszaną z żołnierzami imperium):
+  *droid wartowniczy* (Cytadela) strzela seriami po 3 i nie robi uników; *jaszczur* (Sarrak) prawie zawsze odskakuje i strzela dubletem;
+  *skrzelak* (Thalos) pluje kwasem i odnawia życie, gdy go nie ranisz; *mroźny olbrzym* (Krio) nie ma broni, szarżuje i bije pięścią;
+  *modliszak* (Verdan) jest prawie niewidoczny, dopóki cię nie zauważy, i tnie pazurami; *magmowiec* (Ignis) ciska kulami magmy,
+  których nie da się odbić – ostrze tylko je rozprasza.
 - **Skradanie**: wróg, który cię nie zauważył (śpi albo stoi tyłem), pada od jednego **cichego ciosu** (A).
   Bieg i lądowanie słychać z bliska – podchodź krokiem (Shift).
 - **Zagadki aury**: blok `X` przesuwasz odepchnięciem (pchnij) i przyciągnięciem (do siebie); wepchnięty w szczelinę

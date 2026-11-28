@@ -634,6 +634,12 @@ const CODEX = [
   ['snow', 'Szturmowcy mrozu', 'Białe płyty i futrzane kołnierze. Walczą na śliskim lodzie Krio.'],
   ['scout', 'Zwiadowcy Verdanu', 'Myśliwi w maskujących pelerynach – czają się między pniami leśnego księżyca.'],
   ['ash', 'Gwardia popiołu', 'Elita Ignis w czarnych płytach z żarzącym się wizjerem. Najtwardsi z żołnierzy.'],
+  ['droid', 'Droid wartowniczy', 'Mechaniczny strażnik Cytadeli. Strzela seriami po trzy i nigdy nie robi uników – odbijaj i tnij.'],
+  ['saur', 'Jaszczur z Sarraku', 'Zwinny gad pustyni. Po trafieniu prawie zawsze odskakuje i strzela dubletem. Przyciśnij go do ściany.'],
+  ['gill', 'Skrzelak z Thalos', 'Pluje kwasem i odnawia życie, gdy przestajesz go ranić. Nie dawaj mu wytchnienia.'],
+  ['yeti', 'Mroźny olbrzym', 'Bez broni, ale z pięściami jak głazy. Szarżuje przez całą komnatę – zasłoń się (blok) i kontruj.'],
+  ['mantis', 'Modliszak z Verdanu', 'Owadzi łowca w kamuflażu – prawie niewidoczny, dopóki cię nie wypatrzy. Tnie pazurami błyskawicznie.'],
+  ['magma', 'Magmowiec z Ignis', 'Żywa skała z żarem w szczelinach. Kul magmy nie da się odbić – ostrze tylko je rozprasza.'],
   ['Mroczny Lord', 'Mroczny Lord', 'Pan Cytadeli i najmłodszy z uczniów Arcylorda. „Twoje światło zgaśnie w tych lochach.”'],
   ['Pani Burz', 'Pani Burz', 'Władczyni wydm Sarrak, walczy ostrzem dwustronnym. „Piasek pogrzebie twoje światło.”'],
   ['Lord Głębin', 'Lord Głębin', 'Strażnik zatopionych ruin Thalos, walczy dwoma ostrzami. „Ocean nie oddaje tego, co pochłonie.”'],
@@ -680,7 +686,7 @@ function codexTap(e) {
   const i = Math.floor((y - 31) / codexRow()), m = codexLen();
   if (x < 124 && i >= 0 && i < m) { if (game.csel === i && game.ctab === 2) codexKey('act'); else { game.csel = i; game.cmsg = ''; } }
 }
-const codexRow = () => (game.ctab === 0 ? 8.6 : 12);
+const codexRow = () => (game.ctab === 0 ? Math.min(8.6, 146 / CODEX.length) : 12);
 // Postać w dużej skali (bez świecących elementów – kolejki EQ/BQ nie są tu rysowane)
 function codexFig(f, x, y, sc) {
   ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.translate(-f.x, -f.y);
@@ -698,17 +704,17 @@ function drawCodex() {
   const row = codexRow(), list = (items) => items.forEach((it, i) => {
     const y = 31 + i * row, sel = i === game.csel;
     if (sel) rrect(6, y, 116, row - 1, 2, 'rgba(60,70,110,0.9)');
-    txt(it[0], 10, y + row / 2 - 0.5, it[1], 'left', row > 10 ? 6.5 : 6);
+    txt(it[0], 10, y + row / 2 - 0.5, it[1], 'left', row > 10 ? 6.5 : row > 8 ? 6 : 5.5);
   });
   const desc = (s, y, col) => { for (const l of wrapTxt(s, 176, 6)) { txt(l, 220, y, col || '#c8c0b0', 'center', 6); y += 8; } return y; };
   if (game.ctab === 0) {
     list(CODEX.map(e => seen(e[0]) ? [e[1], META.lords.includes(e[0]) ? '#ff9090' : '#c8d0e0'] : ['???', '#4a5064']));
-    const e = CODEX[game.csel], ok = seen(e[0]), lord = game.csel >= 11;
+    const li = game.csel - CODEX.findIndex(q => q[0] === 'Mroczny Lord'), e = CODEX[game.csel], ok = seen(e[0]), lord = li >= 0;
     if (ok) {
       const ty = lord ? 'lord' : ['blaster', 'rifle', 'shield', 'sniper', 'drone', 'jet'].includes(e[0]) ? e[0] : 'blaster';
-      const sty = lord ? ['lord', 'lord2', 'lord3', 'lord4', 'lord5', 'lord6'][game.csel - 11] : ty === e[0] ? '' : e[0];
+      const sty = lord ? ['lord', 'lord2', 'lord3', 'lord4', 'lord5', 'lord6'][li] : ty === e[0] ? '' : e[0];
       const f = mkFoe({ k: ty, sty: sty || undefined, name: lord ? e[0] : undefined, r: 2, c: 5, dir: -1,
-        dbl: lord && [12, 14].includes(game.csel), dual: lord && [13, 15, 16].includes(game.csel) });
+        dbl: lord && [1, 3].includes(li), dual: lord && [2, 4, 5].includes(li) });
       f.st = 'idle';
       codexFig(f, 220, ty === 'drone' || ty === 'jet' ? 80 : 112, 2.4);
       txt(e[1], 220, 124, lord ? '#ff9090' : '#ffe080', 'center', 8);
