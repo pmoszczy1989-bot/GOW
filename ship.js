@@ -214,9 +214,9 @@ function shPattern(p) {
 }
 
 function shSpawn(k, o) {
-  const S = SHIP, B = SH_K[k];
+  const S = SHIP, B = SH_K[k], hp = B.ship || k === 'wtur' ? Math.round(B.hp * HARD) : B.hp;   // HARD – mnożnik trudności z game.js
   const f = {
-    k, x: 0, y: 0, z: SH_ZF, pz: SH_ZF, hp: B.hp, max: B.hp, r: B.r || 5, t: 0, hitT: 0, cd: shR(1, 2.5), st: 'in',
+    k, x: 0, y: 0, z: SH_ZF, pz: SH_ZF, hp, max: hp, r: B.r || 5, t: 0, hitT: 0, cd: shR(1, 2.5), st: 'in',
     ship: !!B.ship, solid: !!B.solid, inf: !B.hp, box: !!B.box, hw: 0, hh: 0, rot: Math.random() * 6, vr: 0,
     seed: Math.random() * 100, shots: 0,
   };
@@ -606,7 +606,7 @@ function updShip(dt) {
   if (S.phase === 'fly' && S.T >= S.nextW && S.T < S.Dtot - 3 && !pause) {
     const L = inTrW ? tr.pats : S.C.pats;
     shPattern(L[S.wi++ % L.length]);
-    S.nextW = S.T + S.C.gap * shR(0.85, 1.15);
+    S.nextW = S.T + S.C.gap * shR(0.85, 1.15) / HARD;
   }
   for (let i = S.queue.length - 1; i >= 0; i--) {
     const q = S.queue[i];
@@ -704,7 +704,7 @@ function shUpdFoes(dt, V, idle) {
     if (f.gone) continue;
     f.pz = f.z;
     f.t += dt; if (f.hitT > 0) f.hitT -= dt;
-    f.cd -= dt;
+    f.cd -= dt * HARD;
     const fire = !idle && f.z < 560 && f.z > SH_PZ + 50 && f.cd <= 0;
     if (f.k === 'eye') {
       f.rot += f.vr * dt;

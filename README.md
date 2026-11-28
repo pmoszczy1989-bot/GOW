@@ -79,6 +79,9 @@ wyjście za krawędź ekranu przenosi do sąsiedniej. Definicje w `levels.js` (`
 
 Każdy kolejny poziom jest trochę trudniejszy (więcej i silniejszych wrogów, krótsze okna, więcej pułapek).
 
+Stała `HARD = 1.5` (`game.js`) podnosi trudność o 50%: wrogowie mają 1,5× więcej życia i atakują 1,5× częściej,
+dysze ognia płoną dłużej, ruchome platformy jeżdżą szybciej, a w lotach statki wroga są wytrzymalsze, strzelają częściej i fale przylatują gęściej.
+
 Legenda: `_` podłoga · spacja – brak podłogi (w dolnym rzędzie przepaść, pod wodą dno) · `#` mur ·
 `L` luźna płyta · `S` kolce · `W` rękojeść · `H` mikstura · `M` duża mikstura · `A` eliksir wigoru (zielony: +1 serce jednorazowo, znika przy pierwszej ranie lub z końcem poziomu) · `P` płyta naciskowa ·
 `G` krata · `D` drzwi · `B` skrzynia · `O` kryształ · `C` kryształ ostrza (jeden na rozdział) · `T` terminal · `K` konsola · `E` bariera energetyczna ·
@@ -87,6 +90,7 @@ Legenda: `_` podłoga · spacja – brak podłogi (w dolnym rzędzie przepaść,
 Wrogowie `k`: `blaster`, `rifle`, `shield` (tarczownik), `sniper` (snajper), `jet` (łowca z plecakiem odrzutowym), `drone`, `lord`.
 Komnata: `{ map, foes, plats, wl, lore }` – `plats` ruchome platformy `{ r, c0, c1, sp }` (szerokie, 52 px),
 `wl` poziom wody w px (125 – zalany dolny rząd, -100 – cała komnata pod wodą).
+Na granicy komnat otwarty rząd musi być suchy albo zalany po obu stronach – przejście do sąsiedniej komnaty nigdy nie zmienia chodzenia w pływanie.
 
 ## Zasady
 

@@ -472,15 +472,17 @@ function say(text, sec) { msg = { text, t: sec || 3 }; VOICE.hint(text); }
 
 // Trudność rośnie z każdym poziomem (0 – pierwszy, 1 – ostatni)
 const diff = () => lvl / (LEVELS.length - 1);
+// Mnożnik trudności (+50%): życie i tempo ataków wrogów, dysze, platformy, fale w lotach
+const HARD = 1.5;
 // Numer rozdziału Lorda (liczba przelotów przed poziomem) – kolejni Lordowie są szybsi i czujniejsi
 const lordLv = () => LEVELS.slice(0, lvl).filter(l => l.ship).length;
 const lordName = f => f.name || 'Mroczny Lord';
 
 function mkFoe(f) {
   const d = diff();
-  const hp = (f.k === 'lord' ? 5 + lordLv() : f.k === 'drone' ? 2 + (d > 0.5 ? 1 : 0) : f.k === 'jet' ? 3 + (d > 0.6 ? 1 : 0)
+  const hp = Math.round(HARD * (f.k === 'lord' ? 5 + lordLv() : f.k === 'drone' ? 2 + (d > 0.5 ? 1 : 0) : f.k === 'jet' ? 3 + (d > 0.6 ? 1 : 0)
     : f.k === 'sniper' ? 2 : Math.min(5, (f.k === 'rifle' || f.k === 'shield' ? 4 : 3) + (d >= 0.35 ? 1 : 0))) +
-    (game.ngp ? (f.k === 'lord' ? 2 : 1) * Math.min(3, game.ngp) : 0);   // Nowa gra+: silniejsi wrogowie
+    (game.ngp ? (f.k === 'lord' ? 2 : 1) * Math.min(3, game.ngp) : 0));   // Nowa gra+: silniejsi wrogowie
   const o = {
     k: f.k, x: f.c * TW + 16, y: floorY(f.r), r: f.r, dir: f.dir, hx: f.c * TW + 16,
     st: f.sleep ? 'sleep' : f.k === 'lord' ? 'meditate' : 'idle', t: 0, hp, max: hp, alive: true,
@@ -510,7 +512,7 @@ function mkRoom(R) {
       if (ch !== '#' && ch !== 'D' && ch !== 'G' && floorY(r) - 36 < D.wl) lm.push({ x: c * TW + 16, y: floorY(r) - 36 });
     }
   }
-  const plats = (R.plats || []).map(q => ({ r: q.r, x0: q.c0 * TW + 16, x1: q.c1 * TW + 16, x: q.c0 * TW + 16, v: q.sp, w: 26, dx: 0 }));
+  const plats = (R.plats || []).map(q => ({ r: q.r, x0: q.c0 * TW + 16, x1: q.c1 * TW + 16, x: q.c0 * TW + 16, v: q.sp * HARD, w: 26, dx: 0 }));
   return { D, map, foes: (R.foes || []).map(mkFoe), loose, spikes: sp, lamps: lm, plats, mines, blocks };
 }
 
@@ -633,7 +635,7 @@ const gateBlocks = (r, c) => cell(r, c) === 'G' && gate < 0.8;
 const barrierOn = c => !used && ((game.anim + c * 0.37) % 3.2) < 2;
 const barBlocks = (r, c) => cell(r, c) === 'E' && barrierOn(c);
 // Dysza płomieni (Ignis): 0,8 s ognia co 2,4 s, przesunięta w fazie zależnie od kolumny
-const ventOn = c => ((game.anim + c * 0.53) % 2.4) < 0.8;
+const ventOn = c => ((game.anim + c * 0.53) % 2.4) < 0.8 * HARD;
 const doorOpen = () => !LV.lock || !ROOMS.some(R => R.foes.some(f => f.k === 'lord' && f.alive));
 const inWater = () => RD.wl < 900;
 
@@ -2288,7 +2290,7 @@ function updJet(f, dt) {
       const ex = tx - f.x, ey = ty - f.y, el = Math.hypot(ex, ey) || 1, sp = 55 * (1 + 0.3 * df);
       if (el > 6) go(ex / el * sp, ey / el * sp);
       else f.y += Math.sin(f.ph * 3) * 0.3;
-      f.cd -= dt;
+      f.cd -= dt * HARD;
       if (f.cd <= 0 && d < 200) {
         const v = 170 * (1 + 0.2 * df);
         BOLTS.push({ x: f.x + f.dir * 8, y: f.y + 2, r: f.r, vx: dx / d * v, vy: dy / d * v, o: 'e', src: f });
@@ -2362,7 +2364,7 @@ function updTrooper(f, dt) {
         if (f.sdt <= 0) { f.sdt = 0.5 + Math.random() * 0.9; f.sd = [-1, 0, 0, 1][Math.floor(Math.random() * 4)]; }
         if (f.sd) foeMove(f, f.sd * 16 * dt);
       }
-      f.cd -= dt;
+      f.cd -= dt * HARD;
       if (f.cd <= 0) { f.st = 'aim'; f.t = 0; }
       break;
     }
@@ -2472,7 +2474,7 @@ function updLord(f, dt) {
       f.dir = Math.sign(dx) || f.dir;
       if (d > 34) foeMove(f, f.dir * 34 * sp * dt);
       else if (d < 20) foeMove(f, -f.dir * 24 * dt);
-      f.cd -= dt * sp;
+      f.cd -= dt * sp * HARD;
       if (f.cd <= 0) {
         if (d < 30 && Math.random() < 0.3) { f.st = 'hop'; f.t = 0; SND.swing(); }   // odskok i wypad
         else if (d < 40 && Math.random() < 0.18 && FIGHTST.includes(P.st) && startLock(f)) break;   // Lord naciera i sczepia ostrza
@@ -4306,7 +4308,7 @@ function drawHUD() {
   let f = engaged();
   if (!f && game.hud && game.hudT > 0) f = game.hud;
   if (f) {
-    const col = { lord: '#ff3040', rifle: '#f0a020', shield: '#a0c8ff', sniper: '#ff6080', jet: '#60e0a0' }[f.k] || '#80a0f0', sp = f.max > 6 ? 7 : 9;
+    const col = { lord: '#ff3040', rifle: '#f0a020', shield: '#a0c8ff', sniper: '#ff6080', jet: '#60e0a0' }[f.k] || '#80a0f0', sp = f.max > 12 ? 5 : f.max > 6 ? 7 : 9;
     for (let i = 0; i < f.max; i++) tri(SW - 11 - i * sp, 187, i < f.hp && f.alive, col, '#302030');
   }
   const s = game.mode === 'gear' || game.mode === 'codex' ? '' : msg.t > 0 ? msg.text : hint();
